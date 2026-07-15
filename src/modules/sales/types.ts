@@ -10,6 +10,30 @@ export type ProductUnit = "pieza" | "metro" | "kg" | "set";
 
 export type ProductCurrency = "MXN" | "USD" | "EUR";
 
+export type ProductSupplierContactMethod = "whatsapp" | "email" | "externa";
+
+export type ShippingDeliveryMethod = "paqueteria" | "flete-propio" | "cliente-recoge" | "por-definir";
+
+export type ShippingAddress = {
+  recipientName: string;
+  recipientPhone: string;
+  recipientEmail: string;
+  company: string;
+  street: string;
+  exteriorNumber: string;
+  interiorNumber: string;
+  neighborhood: string;
+  postalCode: string;
+  city: string;
+  state: string;
+  country: string;
+  deliveryMethod: ShippingDeliveryMethod;
+  deliveryHours: string;
+  references: string;
+  deliveryInstructions: string;
+  locationLink: string;
+};
+
 export type ProductComponentType =
   | "pieza-impresa-3d"
   | "pieza-fabricada"
@@ -42,6 +66,8 @@ export type OrderStatus =
   | "aprobada-comercialmente"
   | "cancelada";
 
+export type QuoteStatus = "enviada" | "seguimiento" | "aceptada" | "rechazada" | "vencida";
+
 export type CommercialStatus =
   | "captura"
   | "pendiente-pago"
@@ -66,7 +92,7 @@ export type Client = {
   email: string;
   phone: string;
   fiscalAddress: string;
-  shippingAddress: string;
+  shippingAddress: ShippingAddress;
   paymentTerm: PaymentTerm;
   notes: string;
   status: ClientStatus;
@@ -96,6 +122,8 @@ export type ProductComponent = {
   process: ProductComponentProcess;
   material: string;
   color: string;
+  supplierContactMethod: ProductSupplierContactMethod;
+  supplierExternalPlatform: string;
   supplierCompany: string;
   supplierContact: string;
   supplierEmail: string;
@@ -140,6 +168,24 @@ export type HistoryEvent = {
   at: string;
   action: string;
   detail: string;
+};
+
+export type SalesQuote = {
+  folio: string;
+  seller: string;
+  createdAt: string;
+  sentAt: string;
+  status: QuoteStatus;
+  selectedClientId: string | null;
+  lines: OrderLine[];
+  requiredDate: string;
+  priority: Priority;
+  priorityReason: string;
+  internalNotes: string;
+  paymentTerm: PaymentTerm;
+  paymentMethod: PaymentMethod;
+  documents: SalesDocument[];
+  history: HistoryEvent[];
 };
 
 export type SalesOrder = {

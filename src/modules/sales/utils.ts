@@ -11,8 +11,12 @@ import type {
   ProductCurrency,
   ProductComponentProcess,
   ProductComponentType,
+  ProductSupplierContactMethod,
+  QuoteStatus,
   SalesOrder,
-  SalesUser
+  SalesUser,
+  ShippingAddress,
+  ShippingDeliveryMethod
 } from "./types";
 
 export const clientStatusLabels: Record<ClientStatus, string> = {
@@ -32,6 +36,14 @@ export const orderStatusLabels: Record<OrderStatus, string> = {
   cancelada: "Cancelada"
 };
 
+export const quoteStatusLabels: Record<QuoteStatus, string> = {
+  enviada: "Enviada",
+  seguimiento: "En seguimiento",
+  aceptada: "Aceptada",
+  rechazada: "Rechazada",
+  vencida: "Vencida"
+};
+
 export const paymentTermLabels: Record<PaymentTerm, string> = {
   contado: "Contado",
   credito: "Crédito",
@@ -44,6 +56,13 @@ export const paymentMethodLabels: Record<PaymentMethod, string> = {
   tarjeta: "Tarjeta",
   efectivo: "Efectivo",
   credito: "Crédito",
+  "por-definir": "Por definir"
+};
+
+export const shippingDeliveryMethodLabels: Record<ShippingDeliveryMethod, string> = {
+  paqueteria: "Paquetería",
+  "flete-propio": "Flete propio",
+  "cliente-recoge": "Cliente recoge",
   "por-definir": "Por definir"
 };
 
@@ -84,6 +103,14 @@ export const currencyLabels: Record<ProductCurrency, string> = {
 export const materialOptions = ["PLA", "PETG", "TPU", "OTRO"] as const;
 
 export const colorOptions = ["NEGRO", "BLANCO", "AZUL", "OTRO"] as const;
+
+export const supplierContactMethodLabels: Record<ProductSupplierContactMethod, string> = {
+  whatsapp: "WHATSAPP",
+  email: "EMAIL",
+  externa: "EXTERNA"
+};
+
+export const supplierExternalPlatformOptions = ["ALIBABA", "AMAZON BUSINESS", "MERCADO LIBRE", "OTRO"] as const;
 
 export const componentTypeLabels: Record<ProductComponentType, string> = {
   "pieza-impresa-3d": "Pieza impresa 3D",
@@ -133,6 +160,68 @@ export function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+export const emptyShippingAddress: ShippingAddress = {
+  recipientName: "",
+  recipientPhone: "",
+  recipientEmail: "",
+  company: "",
+  street: "",
+  exteriorNumber: "",
+  interiorNumber: "",
+  neighborhood: "",
+  postalCode: "",
+  city: "",
+  state: "",
+  country: "México",
+  deliveryMethod: "por-definir",
+  deliveryHours: "",
+  references: "",
+  deliveryInstructions: "",
+  locationLink: ""
+};
+
+export function normalizeShippingAddress(value: ShippingAddress | string | null | undefined): ShippingAddress {
+  if (typeof value === "string") {
+    return {
+      ...emptyShippingAddress,
+      references: value
+    };
+  }
+
+  return {
+    ...emptyShippingAddress,
+    ...(value ?? {})
+  };
+}
+
+export function isShippingAddressComplete(value: ShippingAddress | string | null | undefined) {
+  const address = normalizeShippingAddress(value);
+  const requiredFields = [
+    address.recipientName,
+    address.recipientPhone,
+    address.street,
+    address.exteriorNumber,
+    address.neighborhood,
+    address.postalCode,
+    address.city,
+    address.state,
+    address.country,
+    address.deliveryMethod === "por-definir" ? "" : address.deliveryMethod
+  ];
+
+  return requiredFields.every((field) => field.trim().length > 0);
+}
+
+export function formatShippingAddress(value: ShippingAddress | string | null | undefined) {
+  const address = normalizeShippingAddress(value);
+  const streetLine = [address.street, address.exteriorNumber].filter(Boolean).join(" ");
+  const locationLine = [address.neighborhood, address.city, address.state].filter(Boolean).join(", ");
+  const postalLine = address.postalCode ? `CP ${address.postalCode}` : "";
+  const summary = [streetLine, locationLine, postalLine].filter(Boolean).join(" · ");
+
+  return summary || "Sin dirección de envío";
+}
+
 export function calculateClientStatus(client: Omit<Client, "id" | "status">, currentStatus?: ClientStatus) {
   if (currentStatus === "bloqueado" || currentStatus === "inactivo") {
     return currentStatus;
@@ -146,7 +235,7 @@ export function calculateClientStatus(client: Omit<Client, "id" | "status">, cur
     client.email,
     client.phone,
     client.fiscalAddress,
-    client.shippingAddress,
+    isShippingAddressComplete(client.shippingAddress) ? "direccion-envio-completa" : "",
     client.paymentTerm === "pendiente" ? "" : client.paymentTerm
   ];
 
@@ -165,7 +254,8 @@ export function clientMatches(client: Client, query: string) {
     client.legalName,
     client.taxId,
     client.email,
-    client.phone
+    client.phone,
+    ...Object.values(normalizeShippingAddress(client.shippingAddress))
   ].some((field) => field.toLowerCase().includes(normalizedQuery));
 }
 
@@ -184,6 +274,8 @@ export function productMatches(product: Product, query: string) {
     ...product.components.flatMap((component) => [
       component.name,
       component.material,
+      supplierContactMethodLabels[component.supplierContactMethod],
+      component.supplierExternalPlatform,
       component.supplierCompany,
       component.supplierPartNumber,
       component.needsSupplierResearch ? "sin proveedor pendiente compras" : "",
@@ -251,16 +343,9 @@ export function createInitialOrder(user: SalesUser): SalesOrder {
   };
 }
 
-export type ChecklistItem = {
-  id: string;
-  label: string;
-  passed: boolean;
-};
-
-export function evaluateOrder(order: SalesOrder, client: Client | undefined) {
+function baseDocumentChecklist(order: SalesOrder, client: Client | undefined) {
   const selectedClient = Boolean(client);
-  const clientIsActive = client?.status === "activo";
-  const clientComplete = client ? client.status !== "incompleto" : false;
+  const clientAvailable = client ? client.status !== "bloqueado" : false;
   const hasValidProduct = order.lines.length > 0 && order.lines.every(isValidLine);
   const requiredDateOk = Boolean(order.requiredDate) && order.requiredDate >= todayIso();
   const priorityOk = Boolean(order.priority);
@@ -268,6 +353,74 @@ export function evaluateOrder(order: SalesOrder, client: Client | undefined) {
     order.priority !== "urgente" && order.priority !== "critica"
       ? true
       : order.priorityReason.trim().length > 0;
+
+  return {
+    selectedClient,
+    clientAvailable,
+    hasValidProduct,
+    requiredDateOk,
+    priorityOk,
+    priorityReasonOk
+  };
+}
+
+export type ChecklistItem = {
+  id: string;
+  label: string;
+  passed: boolean;
+};
+
+export function evaluateQuote(order: SalesOrder, client: Client | undefined) {
+  const base = baseDocumentChecklist(order, client);
+  const clientContactOk = Boolean(client?.email.trim() || client?.phone.trim());
+
+  const checklist: ChecklistItem[] = [
+    { id: "client-selected", label: "Cliente seleccionado", passed: base.selectedClient },
+    { id: "client-available", label: "Cliente no bloqueado", passed: base.clientAvailable },
+    { id: "client-contact", label: "Cliente con correo o teléfono", passed: clientContactOk },
+    { id: "product", label: "Al menos un producto activo seleccionado", passed: base.hasValidProduct },
+    { id: "quantity", label: "Cantidades válidas en todas las líneas", passed: order.lines.every(isValidLine) && order.lines.length > 0 },
+    { id: "date", label: "Fecha requerida capturada y vigente", passed: base.requiredDateOk },
+    { id: "priority", label: "Prioridad definida", passed: base.priorityOk },
+    { id: "priority-reason", label: "Motivo de prioridad cuando aplica", passed: base.priorityReasonOk }
+  ];
+
+  return {
+    checklist,
+    canSend: checklist.every((item) => item.passed) && order.status !== "cancelada"
+  };
+}
+
+export function evaluateOrderDraft(order: SalesOrder, client: Client | undefined) {
+  const base = baseDocumentChecklist(order, client);
+  const clientIsActive = client?.status === "activo";
+  const clientComplete = client ? client.status !== "incompleto" : false;
+  const paymentTermOk = order.paymentTerm !== "pendiente";
+  const paymentMethodOk = order.paymentMethod !== "por-definir";
+
+  const checklist: ChecklistItem[] = [
+    { id: "client-selected", label: "Cliente seleccionado", passed: base.selectedClient },
+    { id: "client-active", label: "Cliente activo", passed: clientIsActive },
+    { id: "client-complete", label: "Datos obligatorios del cliente completos", passed: clientComplete },
+    { id: "product", label: "Al menos un producto activo seleccionado", passed: base.hasValidProduct },
+    { id: "quantity", label: "Cantidades válidas en todas las líneas", passed: order.lines.every(isValidLine) && order.lines.length > 0 },
+    { id: "date", label: "Fecha requerida capturada y vigente", passed: base.requiredDateOk },
+    { id: "priority", label: "Prioridad definida", passed: base.priorityOk },
+    { id: "priority-reason", label: "Motivo de prioridad cuando aplica", passed: base.priorityReasonOk },
+    { id: "payment-term", label: "Condición de pago definida", passed: paymentTermOk },
+    { id: "payment-method", label: "Método de pago definido", passed: paymentMethodOk }
+  ];
+
+  return {
+    checklist,
+    canGenerate: checklist.every((item) => item.passed) && order.status !== "cancelada"
+  };
+}
+
+export function evaluateOrder(order: SalesOrder, client: Client | undefined) {
+  const base = baseDocumentChecklist(order, client);
+  const clientIsActive = client?.status === "activo";
+  const clientComplete = client ? client.status !== "incompleto" : false;
   const paymentTermOk = order.paymentTerm !== "pendiente";
   const paymentMethodOk = order.paymentMethod !== "por-definir";
   const paymentOk =
@@ -277,14 +430,14 @@ export function evaluateOrder(order: SalesOrder, client: Client | undefined) {
   const creditOk = order.paymentTerm === "credito" ? order.commercialStatus === "credito-aprobado" : true;
 
   const checklist: ChecklistItem[] = [
-    { id: "client-selected", label: "Cliente seleccionado", passed: selectedClient },
+    { id: "client-selected", label: "Cliente seleccionado", passed: base.selectedClient },
     { id: "client-active", label: "Cliente activo", passed: clientIsActive },
     { id: "client-complete", label: "Datos obligatorios del cliente completos", passed: clientComplete },
-    { id: "product", label: "Al menos un producto activo seleccionado", passed: hasValidProduct },
+    { id: "product", label: "Al menos un producto activo seleccionado", passed: base.hasValidProduct },
     { id: "quantity", label: "Cantidades válidas en todas las líneas", passed: order.lines.every(isValidLine) && order.lines.length > 0 },
-    { id: "date", label: "Fecha requerida capturada y vigente", passed: requiredDateOk },
-    { id: "priority", label: "Prioridad definida", passed: priorityOk },
-    { id: "priority-reason", label: "Motivo de prioridad cuando aplica", passed: priorityReasonOk },
+    { id: "date", label: "Fecha requerida capturada y vigente", passed: base.requiredDateOk },
+    { id: "priority", label: "Prioridad definida", passed: base.priorityOk },
+    { id: "priority-reason", label: "Motivo de prioridad cuando aplica", passed: base.priorityReasonOk },
     { id: "payment-term", label: "Condición de pago definida", passed: paymentTermOk },
     { id: "payment-method", label: "Método de pago definido", passed: paymentMethodOk },
     { id: "payment-credit", label: "Pago o crédito aprobado si aplica", passed: paymentOk && creditOk }

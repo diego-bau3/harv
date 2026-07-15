@@ -8,6 +8,7 @@ import type {
   ProductCurrency,
   ProductPrintDesign,
   ProductStatus,
+  ProductSupplierContactMethod,
   ProductUnit
 } from "../../sales/types";
 import {
@@ -19,7 +20,9 @@ import {
   formatCurrency,
   materialOptions,
   productStatusLabels,
-  productUnitLabels
+  productUnitLabels,
+  supplierContactMethodLabels,
+  supplierExternalPlatformOptions
 } from "../../sales/utils";
 
 type ProductDraft = Omit<Product, "id">;
@@ -64,6 +67,8 @@ const emptyComponent = (): ProductComponent => ({
   process: "comprado",
   material: "",
   color: "",
+  supplierContactMethod: "whatsapp",
+  supplierExternalPlatform: "",
   supplierCompany: "",
   supplierContact: "",
   supplierEmail: "",
@@ -109,6 +114,8 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
           technicalNotes: product.technicalNotes,
           components: product.components.map((component) => ({
             ...component,
+            supplierContactMethod: component.supplierContactMethod ?? "whatsapp",
+            supplierExternalPlatform: component.supplierExternalPlatform ?? "",
             needsSupplierResearch: component.needsSupplierResearch ?? false,
             supplierResearchNotes: component.supplierResearchNotes ?? "",
             printDesigns: component.printDesigns ?? []
@@ -151,6 +158,8 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
         return {
           ...component,
           needsSupplierResearch,
+          supplierContactMethod: "whatsapp",
+          supplierExternalPlatform: "",
           supplierCompany: "",
           supplierContact: "",
           supplierEmail: "",
@@ -162,6 +171,21 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
           referenceLink: ""
         };
       })
+    }));
+  }
+
+  function updateSupplierContactMethod(componentId: string, supplierContactMethod: ProductSupplierContactMethod) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      components: currentDraft.components.map((component) =>
+        component.id === componentId
+          ? {
+              ...component,
+              supplierContactMethod,
+              supplierExternalPlatform: supplierContactMethod === "externa" ? component.supplierExternalPlatform : ""
+            }
+          : component
+      )
     }));
   }
 
@@ -316,11 +340,36 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
       });
     });
 
-    const errors = [...optionErrors, ...printErrors];
+    const supplierErrors = draft.components.flatMap((component) => {
+      if (
+        component.needsSupplierResearch ||
+        (component.process !== "comprado" && component.process !== "servicio-externo") ||
+        component.supplierContactMethod !== "externa"
+      ) {
+        return [];
+      }
+
+      if (!component.supplierExternalPlatform.trim() || component.supplierExternalPlatform === "OTRO") {
+        return [`Especifica la plataforma externa de la pieza "${component.name || "sin nombre"}".`];
+      }
+
+      return [];
+    });
+
+    const errors = [...optionErrors, ...printErrors, ...supplierErrors];
 
     if (errors.length > 0) {
       const firstInvalidComponent = draft.components.find((component) => {
         if (component.material === "OTRO" || component.color === "OTRO") {
+          return true;
+        }
+
+        if (
+          !component.needsSupplierResearch &&
+          (component.process === "comprado" || component.process === "servicio-externo") &&
+          component.supplierContactMethod === "externa" &&
+          (!component.supplierExternalPlatform.trim() || component.supplierExternalPlatform === "OTRO")
+        ) {
           return true;
         }
 
@@ -350,6 +399,7 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
         ...component,
         material: component.material.toUpperCase(),
         color: component.color.toUpperCase(),
+        supplierExternalPlatform: component.supplierExternalPlatform.toUpperCase(),
         printDesigns:
           component.process === "impresion-3d"
             ? component.printDesigns.map((design) => ({
@@ -668,6 +718,54 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
                         </label>
                       ) : (
                         <div className="form-grid four-columns">
+                        <label className="field">
+                          <span>Método de contacto</span>
+                          <select
+                            value={component.supplierContactMethod}
+                            onChange={(event) =>
+                              updateSupplierContactMethod(component.id, event.target.value as ProductSupplierContactMethod)
+                            }
+                          >
+                            {Object.entries(supplierContactMethodLabels).map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        {component.supplierContactMethod === "externa" && (
+                          <label className="field">
+                            <span>Plataforma externa</span>
+                            <select
+                              value={optionValue(component.supplierExternalPlatform, supplierExternalPlatformOptions)}
+                              onChange={(event) =>
+                                updateComponent(component.id, "supplierExternalPlatform", event.target.value)
+                              }
+                            >
+                              <option value="">SELECCIONA</option>
+                              {supplierExternalPlatformOptions.map((platform) => (
+                                <option key={platform} value={platform}>
+                                  {platform}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+
+                        {component.supplierContactMethod === "externa" &&
+                          optionValue(component.supplierExternalPlatform, supplierExternalPlatformOptions) === "OTRO" && (
+                            <label className="field">
+                              <span>Especificar plataforma</span>
+                              <input
+                                value={customOptionValue(component.supplierExternalPlatform, supplierExternalPlatformOptions)}
+                                onChange={(event) =>
+                                  updateComponent(component.id, "supplierExternalPlatform", event.target.value.toUpperCase())
+                                }
+                              />
+                            </label>
+                          )}
+
                         <label className="field">
                           <span>Empresa</span>
                           <input

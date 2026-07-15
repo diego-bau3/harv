@@ -10,6 +10,7 @@ import {
   Plus,
   Save,
   Search,
+  Send,
   Trash2,
   UserRound
 } from "lucide-react";
@@ -26,7 +27,8 @@ import type {
   Product,
   ProductCurrency,
   SalesDocument,
-  SalesOrder
+  SalesOrder,
+  SalesQuote
 } from "../types";
 import {
   calculateClientStatus,
@@ -35,16 +37,19 @@ import {
   createId,
   createInitialOrder,
   documentTypeLabels,
-  evaluateOrder,
+  evaluateOrderDraft,
+  evaluateQuote,
   formatCurrency,
   formatDateTime,
+  formatShippingAddress,
   isValidLine,
   lineSubtotal,
   orderStatusLabels,
   orderTotals,
   paymentMethodLabels,
   paymentTermLabels,
-  priorityLabels
+  priorityLabels,
+  quoteStatusLabels
 } from "../utils";
 import { ClientModal } from "./ClientModal";
 import { ProductModal } from "./ProductModal";
@@ -77,9 +82,26 @@ function currencyForLines(lines: OrderLine[]): ProductCurrency {
   return lines[0]?.product.currency ?? "MXN";
 }
 
+function createQuoteFolio() {
+  return `HV-C-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+function generatedOrderStatus(order: SalesOrder) {
+  if (order.paymentTerm === "credito" && order.commercialStatus !== "credito-aprobado") {
+    return "pendiente-credito" as const;
+  }
+
+  if ((order.paymentTerm === "contado" || order.paymentTerm === "anticipo") && order.commercialStatus !== "pago-verificado") {
+    return "pendiente-pago" as const;
+  }
+
+  return "aprobada-comercialmente" as const;
+}
+
 export function SalesView({ onBack, products }: SalesViewProps) {
   const [clients, setClients] = useState<Client[]>(() => initialClients);
   const [order, setOrder] = useState<SalesOrder>(() => createInitialOrder(salesUser));
+  const [sentQuotes, setSentQuotes] = useState<SalesQuote[]>([]);
   const [generatedOrders, setGeneratedOrders] = useState<SalesOrder[]>([]);
   const [clientQuery, setClientQuery] = useState("");
   const [clientModal, setClientModal] = useState<{ client?: Client } | null>(null);
@@ -98,8 +120,10 @@ export function SalesView({ onBack, products }: SalesViewProps) {
 
   const totals = useMemo(() => orderTotals(order.lines), [order.lines]);
   const orderCurrency = currencyForLines(order.lines);
-  const evaluation = useMemo(() => evaluateOrder(order, selectedClient), [order, selectedClient]);
-  const missingItems = evaluation.checklist.filter((item) => !item.passed);
+  const quoteEvaluation = useMemo(() => evaluateQuote(order, selectedClient), [order, selectedClient]);
+  const orderDraftEvaluation = useMemo(() => evaluateOrderDraft(order, selectedClient), [order, selectedClient]);
+  const quoteMissingItems = quoteEvaluation.checklist.filter((item) => !item.passed);
+  const orderMissingItems = orderDraftEvaluation.checklist.filter((item) => !item.passed);
 
   function updateOrder(patch: Partial<SalesOrder>, action?: string, detail?: string) {
     setOrder((currentOrder) => {
@@ -322,20 +346,76 @@ export function SalesView({ onBack, products }: SalesViewProps) {
     updateOrder({ status: "borrador" }, "Orden guardada", "Se guardó como borrador.");
   }
 
-  function generateOrder() {
-    if (!evaluation.canApprove) {
+  function sendQuote() {
+    if (!quoteEvaluation.canSend) {
       return;
     }
 
+    const sentAt = new Date().toISOString();
+    const quoteFolio = createQuoteFolio();
+    const sentQuote: SalesQuote = {
+      folio: quoteFolio,
+      seller: salesUser.name,
+      createdAt: order.createdAt,
+      sentAt,
+      status: "enviada",
+      selectedClientId: order.selectedClientId,
+      lines: order.lines,
+      requiredDate: order.requiredDate,
+      priority: order.priority,
+      priorityReason: order.priorityReason,
+      internalNotes: order.internalNotes,
+      paymentTerm: order.paymentTerm,
+      paymentMethod: order.paymentMethod,
+      documents: order.documents,
+      history: [createHistory("Cotización enviada", `La cotización ${quoteFolio} fue enviada.`), ...order.history]
+    };
+
+    setSentQuotes((currentQuotes) => [sentQuote, ...currentQuotes]);
+    setOrder(createInitialOrder(salesUser));
+  }
+
+  function generateOrder() {
+    if (!orderDraftEvaluation.canGenerate) {
+      return;
+    }
+
+    const nextStatus = generatedOrderStatus(order);
     const completedOrder = withHistory(
       order,
-      { ...order, status: "aprobada-comercialmente" },
+      { ...order, status: nextStatus },
       "Orden generada",
-      `La orden ${order.folio} fue generada.`
+      nextStatus === "aprobada-comercialmente"
+        ? `La orden ${order.folio} fue generada y aprobada comercialmente.`
+        : `La orden ${order.folio} fue generada como ${orderStatusLabels[nextStatus].toLowerCase()}.`
     );
 
     setGeneratedOrders((currentOrders) => [completedOrder, ...currentOrders]);
     setOrder(createInitialOrder(salesUser));
+  }
+
+  function markGeneratedOrderPaid(orderFolio: string) {
+    if (!salesUser.permissions.verifyPayment) {
+      return;
+    }
+
+    setGeneratedOrders((currentOrders) =>
+      currentOrders.map((generatedOrder) =>
+        generatedOrder.folio === orderFolio
+          ? {
+              ...generatedOrder,
+              status: "aprobada-comercialmente",
+              commercialStatus: "pago-verificado",
+              paymentVerifiedAt: new Date().toISOString(),
+              paymentVerifiedBy: salesUser.name || "Ventas",
+              history: [
+                createHistory("Pago verificado", `La orden ${generatedOrder.folio} fue marcada como pagada.`),
+                ...generatedOrder.history
+              ]
+            }
+          : generatedOrder
+      )
+    );
   }
 
   function cancelOrder() {
@@ -365,7 +445,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
         </button>
         <div className="sales-title">
           <span>Ventas</span>
-          <h1>Generar orden</h1>
+          <h1>Cotizaciones y órdenes</h1>
         </div>
         <span className={`order-status status-${order.status}`}>{orderStatusLabels[order.status]}</span>
       </header>
@@ -403,6 +483,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
                   <span>
                     {client.legalName || "Sin razón social"} · {client.taxId || "Sin RFC"}
                   </span>
+                  <span>{formatShippingAddress(client.shippingAddress)}</span>
                 </div>
                 <span className={`status-pill ${client.status}`}>{clientStatusLabels[client.status]}</span>
                 <div className="client-actions">
@@ -427,7 +508,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
         <section className="sales-panel order-builder-panel">
           <div className="clean-section-heading">
             <div>
-              <h2>Generar orden</h2>
+              <h2>Generar cotización u orden</h2>
               <p>Captura cliente, producto, cantidad, entrega y condiciones comerciales.</p>
             </div>
             <div className="button-row">
@@ -747,22 +828,45 @@ export function SalesView({ onBack, products }: SalesViewProps) {
                 <strong>{formatCurrency(totals.total, orderCurrency)}</strong>
               </div>
 
-              {missingItems.length > 0 ? (
+              {quoteMissingItems.length > 0 ? (
                 <div className="order-missing">
                   <AlertCircle size={18} />
-                  <span>Falta: {missingItems.slice(0, 3).map((item) => item.label.toLowerCase()).join(", ")}.</span>
+                  <span>Falta para cotizar: {quoteMissingItems.slice(0, 3).map((item) => item.label.toLowerCase()).join(", ")}.</span>
                 </div>
               ) : (
                 <div className="order-ready">
                   <CheckCircle2 size={18} />
-                  <span>Orden lista para generar.</span>
+                  <span>Cotización lista para enviar.</span>
                 </div>
               )}
 
-              <button className="approve-button generate-order-button" disabled={!evaluation.canApprove} onClick={generateOrder} type="button">
-                <ClipboardCheck size={18} />
-                Generar orden
-              </button>
+              {orderMissingItems.length > 0 ? (
+                <div className="order-missing">
+                  <AlertCircle size={18} />
+                  <span>Falta para orden: {orderMissingItems.slice(0, 3).map((item) => item.label.toLowerCase()).join(", ")}.</span>
+                </div>
+              ) : (
+                <div className="order-ready">
+                  <CheckCircle2 size={18} />
+                  <span>Orden lista para generar y cobrar.</span>
+                </div>
+              )}
+
+              <div className="sales-document-actions">
+                <button className="secondary-button" disabled={!quoteEvaluation.canSend} onClick={sendQuote} type="button">
+                  <Send size={16} />
+                  Enviar cotización
+                </button>
+                <button
+                  className="approve-button generate-order-button"
+                  disabled={!orderDraftEvaluation.canGenerate}
+                  onClick={generateOrder}
+                  type="button"
+                >
+                  <ClipboardCheck size={18} />
+                  Generar orden
+                </button>
+              </div>
               <button className="secondary-button danger" onClick={cancelOrder} type="button">
                 Cancelar
               </button>
@@ -770,11 +874,52 @@ export function SalesView({ onBack, products }: SalesViewProps) {
           </div>
         </section>
 
+        <section className="sales-panel quotations-panel">
+          <div className="clean-section-heading">
+            <div>
+              <h2>Cotizaciones enviadas</h2>
+              <p>Seguimiento comercial de cotizaciones mandadas al cliente.</p>
+            </div>
+          </div>
+
+          <div className="generated-orders-list">
+            {sentQuotes.map((quote) => {
+              const quoteClient = clients.find((client) => client.id === quote.selectedClientId);
+              const quoteTotal = orderTotals(quote.lines).total;
+              const quoteCurrency = currencyForLines(quote.lines);
+
+              return (
+                <article className="generated-order-row quote-row" key={quote.folio}>
+                  <div>
+                    <span>Folio</span>
+                    <strong>{quote.folio}</strong>
+                  </div>
+                  <div>
+                    <span>Cliente</span>
+                    <strong>{quoteClient?.commercialName || "Sin cliente"}</strong>
+                  </div>
+                  <div>
+                    <span>Total</span>
+                    <strong>{formatCurrency(quoteTotal, quoteCurrency)}</strong>
+                  </div>
+                  <div>
+                    <span>Enviada</span>
+                    <strong>{formatDateTime(quote.sentAt)}</strong>
+                  </div>
+                  <span className={`order-status status-${quote.status}`}>{quoteStatusLabels[quote.status]}</span>
+                </article>
+              );
+            })}
+
+            {sentQuotes.length === 0 ? <p className="empty-state">Todavía no hay cotizaciones enviadas.</p> : null}
+          </div>
+        </section>
+
         <section className="sales-panel generated-orders-panel">
           <div className="clean-section-heading">
             <div>
-              <h2>Órdenes generadas</h2>
-              <p>Consulta las órdenes creadas desde Ventas.</p>
+              <h2>Órdenes por cobrar</h2>
+              <p>Órdenes generadas desde Ventas con pago o crédito pendiente de seguimiento.</p>
             </div>
           </div>
 
@@ -785,7 +930,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
               const generatedCurrency = currencyForLines(generatedOrder.lines);
 
               return (
-                <article className="generated-order-row" key={generatedOrder.folio}>
+                <article className="generated-order-row order-row" key={generatedOrder.folio}>
                   <div>
                     <span>Folio</span>
                     <strong>{generatedOrder.folio}</strong>
@@ -799,15 +944,27 @@ export function SalesView({ onBack, products }: SalesViewProps) {
                     <strong>{formatCurrency(generatedTotal, generatedCurrency)}</strong>
                   </div>
                   <div>
+                    <span>Pago</span>
+                    <strong>{generatedOrder.paymentLink || paymentTermLabels[generatedOrder.paymentTerm]}</strong>
+                  </div>
+                  <div>
                     <span>Entrega</span>
                     <strong>{generatedOrder.requiredDate || "Sin fecha"}</strong>
                   </div>
-                  <span className={`order-status status-${generatedOrder.status}`}>{orderStatusLabels[generatedOrder.status]}</span>
+                  <div className="generated-order-actions">
+                    <span className={`order-status status-${generatedOrder.status}`}>{orderStatusLabels[generatedOrder.status]}</span>
+                    {generatedOrder.status === "pendiente-pago" ? (
+                      <button className="secondary-button compact-button" onClick={() => markGeneratedOrderPaid(generatedOrder.folio)} type="button">
+                        <CheckCircle2 size={15} />
+                        Marcar pagada
+                      </button>
+                    ) : null}
+                  </div>
                 </article>
               );
             })}
 
-            {generatedOrders.length === 0 ? <p className="empty-state">Todavía no hay órdenes generadas.</p> : null}
+            {generatedOrders.length === 0 ? <p className="empty-state">Todavía no hay órdenes por cobrar.</p> : null}
           </div>
         </section>
       </section>

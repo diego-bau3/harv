@@ -1,7 +1,13 @@
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import type { Client, PaymentTerm } from "../types";
-import { paymentTermLabels } from "../utils";
+import type { Client, PaymentTerm, ShippingAddress, ShippingDeliveryMethod } from "../types";
+import {
+  formatShippingAddress,
+  isShippingAddressComplete,
+  normalizeShippingAddress,
+  paymentTermLabels,
+  shippingDeliveryMethodLabels
+} from "../utils";
 
 type ClientDraft = Omit<Client, "id" | "status">;
 
@@ -19,7 +25,7 @@ const emptyClient: ClientDraft = {
   email: "",
   phone: "",
   fiscalAddress: "",
-  shippingAddress: "",
+  shippingAddress: normalizeShippingAddress(undefined),
   paymentTerm: "pendiente",
   notes: ""
 };
@@ -35,15 +41,31 @@ export function ClientModal({ client, onClose, onSave }: ClientModalProps) {
           email: client.email,
           phone: client.phone,
           fiscalAddress: client.fiscalAddress,
-          shippingAddress: client.shippingAddress,
+          shippingAddress: normalizeShippingAddress(client.shippingAddress),
           paymentTerm: client.paymentTerm,
           notes: client.notes
         }
       : emptyClient
   );
+  const [isShippingAddressOpen, setShippingAddressOpen] = useState(() =>
+    client ? !isShippingAddressComplete(client.shippingAddress) : true
+  );
+
+  const shippingAddressComplete = isShippingAddressComplete(draft.shippingAddress);
+  const shippingAddressSummary = formatShippingAddress(draft.shippingAddress);
 
   function updateField<Key extends keyof ClientDraft>(key: Key, value: ClientDraft[Key]) {
     setDraft((currentDraft) => ({ ...currentDraft, [key]: value }));
+  }
+
+  function updateShippingField<Key extends keyof ShippingAddress>(key: Key, value: ShippingAddress[Key]) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      shippingAddress: {
+        ...currentDraft.shippingAddress,
+        [key]: value
+      }
+    }));
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -112,23 +134,181 @@ export function ClientModal({ client, onClose, onSave }: ClientModalProps) {
             </label>
           </div>
 
-          <div className="form-grid two-columns">
-            <label className="field">
-              <span>Dirección fiscal</span>
-              <textarea
-                value={draft.fiscalAddress}
-                onChange={(event) => updateField("fiscalAddress", event.target.value)}
-              />
-            </label>
+          <label className="field">
+            <span>Dirección fiscal</span>
+            <textarea
+              value={draft.fiscalAddress}
+              onChange={(event) => updateField("fiscalAddress", event.target.value)}
+            />
+          </label>
 
-            <label className="field">
-              <span>Dirección de envío</span>
-              <textarea
-                value={draft.shippingAddress}
-                onChange={(event) => updateField("shippingAddress", event.target.value)}
-              />
-            </label>
-          </div>
+          <section className={`shipping-address-card ${isShippingAddressOpen ? "open" : ""}`}>
+            <button
+              className="shipping-address-toggle"
+              type="button"
+              aria-expanded={isShippingAddressOpen}
+              onClick={() => setShippingAddressOpen((currentValue) => !currentValue)}
+            >
+              <div className="shipping-address-summary">
+                <span>Dirección de envío</span>
+                <strong>{shippingAddressSummary}</strong>
+              </div>
+              <span className={`shipping-status-pill ${shippingAddressComplete ? "complete" : "incomplete"}`}>
+                {shippingAddressComplete ? "Completa" : "Incompleta"}
+              </span>
+              <ChevronDown className="shipping-chevron" size={18} aria-hidden="true" />
+            </button>
+
+            {isShippingAddressOpen ? (
+              <div className="shipping-address-fields form-grid three-columns">
+                <label className="field">
+                  <span>Nombre de quien recibe</span>
+                  <input
+                    value={draft.shippingAddress.recipientName}
+                    onChange={(event) => updateShippingField("recipientName", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Teléfono / WhatsApp</span>
+                  <input
+                    value={draft.shippingAddress.recipientPhone}
+                    onChange={(event) => updateShippingField("recipientPhone", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Correo de recepción</span>
+                  <input
+                    type="email"
+                    value={draft.shippingAddress.recipientEmail}
+                    onChange={(event) => updateShippingField("recipientEmail", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Empresa / planta / sucursal</span>
+                  <input
+                    value={draft.shippingAddress.company}
+                    onChange={(event) => updateShippingField("company", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Calle</span>
+                  <input
+                    value={draft.shippingAddress.street}
+                    onChange={(event) => updateShippingField("street", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Número exterior</span>
+                  <input
+                    value={draft.shippingAddress.exteriorNumber}
+                    onChange={(event) => updateShippingField("exteriorNumber", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Número interior</span>
+                  <input
+                    value={draft.shippingAddress.interiorNumber}
+                    onChange={(event) => updateShippingField("interiorNumber", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Colonia</span>
+                  <input
+                    value={draft.shippingAddress.neighborhood}
+                    onChange={(event) => updateShippingField("neighborhood", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Código postal</span>
+                  <input
+                    value={draft.shippingAddress.postalCode}
+                    onChange={(event) => updateShippingField("postalCode", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Ciudad / municipio</span>
+                  <input
+                    value={draft.shippingAddress.city}
+                    onChange={(event) => updateShippingField("city", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Estado</span>
+                  <input
+                    value={draft.shippingAddress.state}
+                    onChange={(event) => updateShippingField("state", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>País</span>
+                  <input
+                    value={draft.shippingAddress.country}
+                    onChange={(event) => updateShippingField("country", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Método de entrega</span>
+                  <select
+                    value={draft.shippingAddress.deliveryMethod}
+                    onChange={(event) =>
+                      updateShippingField("deliveryMethod", event.target.value as ShippingDeliveryMethod)
+                    }
+                  >
+                    {Object.entries(shippingDeliveryMethodLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Horario de recepción</span>
+                  <input
+                    value={draft.shippingAddress.deliveryHours}
+                    onChange={(event) => updateShippingField("deliveryHours", event.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Link de ubicación</span>
+                  <input
+                    placeholder="https://"
+                    value={draft.shippingAddress.locationLink}
+                    onChange={(event) => updateShippingField("locationLink", event.target.value)}
+                  />
+                </label>
+
+                <label className="field wide-field">
+                  <span>Referencias</span>
+                  <textarea
+                    value={draft.shippingAddress.references}
+                    onChange={(event) => updateShippingField("references", event.target.value)}
+                  />
+                </label>
+
+                <label className="field wide-field">
+                  <span>Indicaciones de entrega</span>
+                  <textarea
+                    value={draft.shippingAddress.deliveryInstructions}
+                    onChange={(event) => updateShippingField("deliveryInstructions", event.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
+          </section>
 
           <label className="field">
             <span>Notas comerciales</span>
