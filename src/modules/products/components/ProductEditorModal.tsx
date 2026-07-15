@@ -1,19 +1,23 @@
-import { FileUp, Plus, Trash2, X } from "lucide-react";
+import { Edit3, FileUp, Plus, Trash2, X } from "lucide-react";
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import type {
   Product,
   ProductComponent,
   ProductComponentProcess,
-  ProductComponentStatus,
   ProductComponentType,
+  ProductCurrency,
+  ProductPrintDesign,
   ProductStatus,
   ProductUnit
 } from "../../sales/types";
 import {
+  colorOptions,
   componentProcessLabels,
-  componentStatusLabels,
   componentTypeLabels,
   createId,
+  currencyLabels,
+  formatCurrency,
+  materialOptions,
   productStatusLabels,
   productUnitLabels
 } from "../../sales/utils";
@@ -26,6 +30,31 @@ type ProductEditorModalProps = {
   onSave: (product: ProductDraft, existingProduct?: Product) => void;
 };
 
+const printerOptions = ["P1S", "OTRA"] as const;
+
+const emptyPrintDesign = (printer = "P1S"): ProductPrintDesign => ({
+  id: createId("print-design"),
+  printer,
+  fileName: "",
+  notes: ""
+});
+
+function optionValue(value: string, options: readonly string[]) {
+  if (value === "OTRO") {
+    return "OTRO";
+  }
+
+  if (!value) {
+    return "";
+  }
+
+  return options.includes(value) ? value : "OTRO";
+}
+
+function customOptionValue(value: string, options: readonly string[]) {
+  return value && value !== "OTRO" && !options.includes(value) ? value : "";
+}
+
 const emptyComponent = (): ProductComponent => ({
   id: createId("component"),
   name: "",
@@ -33,11 +62,8 @@ const emptyComponent = (): ProductComponent => ({
   quantity: 1,
   unit: "pieza",
   process: "comprado",
-  status: "pendiente",
-  dimensions: "",
   material: "",
   color: "",
-  finish: "",
   supplierCompany: "",
   supplierContact: "",
   supplierEmail: "",
@@ -47,7 +73,9 @@ const emptyComponent = (): ProductComponent => ({
   leadTime: "",
   minimumPurchaseQuantity: "",
   referenceLink: "",
-  technicalFiles: [],
+  needsSupplierResearch: false,
+  supplierResearchNotes: "",
+  printDesigns: [],
   notes: ""
 });
 
@@ -57,10 +85,9 @@ const emptyProduct: ProductDraft = {
   shortDescription: "",
   category: "",
   basePrice: 0,
+  currency: "MXN",
   unit: "pieza",
   status: "borrador",
-  revision: "",
-  estimatedProductionTime: "",
   commercialNotes: "",
   technicalNotes: "",
   components: []
@@ -75,16 +102,22 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
           shortDescription: product.shortDescription,
           category: product.category,
           basePrice: product.basePrice,
+          currency: product.currency ?? "MXN",
           unit: product.unit,
           status: product.status,
-          revision: product.revision,
-          estimatedProductionTime: product.estimatedProductionTime,
           commercialNotes: product.commercialNotes,
           technicalNotes: product.technicalNotes,
-          components: product.components.map((component) => ({ ...component }))
+          components: product.components.map((component) => ({
+            ...component,
+            needsSupplierResearch: component.needsSupplierResearch ?? false,
+            supplierResearchNotes: component.supplierResearchNotes ?? "",
+            printDesigns: component.printDesigns ?? []
+          }))
         }
       : emptyProduct
   );
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [expandedComponentId, setExpandedComponentId] = useState<string | null>(() => product?.components[0]?.id ?? null);
 
   function updateField<Key extends keyof ProductDraft>(key: Key, value: ProductDraft[Key]) {
     setDraft((currentDraft) => ({ ...currentDraft, [key]: value }));
@@ -103,11 +136,106 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
     }));
   }
 
-  function addComponent() {
+  function updateSupplierResearch(componentId: string, needsSupplierResearch: boolean) {
     setDraft((currentDraft) => ({
       ...currentDraft,
-      components: [...currentDraft.components, emptyComponent()]
+      components: currentDraft.components.map((component) => {
+        if (component.id !== componentId) {
+          return component;
+        }
+
+        if (!needsSupplierResearch) {
+          return { ...component, needsSupplierResearch };
+        }
+
+        return {
+          ...component,
+          needsSupplierResearch,
+          supplierCompany: "",
+          supplierContact: "",
+          supplierEmail: "",
+          supplierPhone: "",
+          supplierPartNumber: "",
+          unitCost: 0,
+          leadTime: "",
+          minimumPurchaseQuantity: "",
+          referenceLink: ""
+        };
+      })
     }));
+  }
+
+  function updateComponentProcess(componentId: string, process: ProductComponentProcess) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      components: currentDraft.components.map((component) => {
+        if (component.id !== componentId) {
+          return component;
+        }
+
+        return {
+          ...component,
+          process,
+          printDesigns:
+            process === "impresion-3d" && component.printDesigns.length === 0
+              ? [emptyPrintDesign("P1S")]
+              : component.printDesigns
+        };
+      })
+    }));
+  }
+
+  function updatePrintDesign<Key extends keyof ProductPrintDesign>(
+    componentId: string,
+    designId: string,
+    key: Key,
+    value: ProductPrintDesign[Key]
+  ) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      components: currentDraft.components.map((component) =>
+        component.id === componentId
+          ? {
+              ...component,
+              printDesigns: component.printDesigns.map((design) =>
+                design.id === designId ? { ...design, [key]: value } : design
+              )
+            }
+          : component
+      )
+    }));
+  }
+
+  function addPrintDesign(componentId: string) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      components: currentDraft.components.map((component) =>
+        component.id === componentId
+          ? { ...component, printDesigns: [...component.printDesigns, emptyPrintDesign("")] }
+          : component
+      )
+    }));
+  }
+
+  function removePrintDesign(componentId: string, designId: string) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      components: currentDraft.components.map((component) =>
+        component.id === componentId
+          ? { ...component, printDesigns: component.printDesigns.filter((design) => design.id !== designId) }
+          : component
+      )
+    }));
+  }
+
+  function addComponent() {
+    const component = emptyComponent();
+
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      components: [...currentDraft.components, component]
+    }));
+    setExpandedComponentId(component.id);
   }
 
   function removeComponent(componentId: string) {
@@ -115,12 +243,17 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
       ...currentDraft,
       components: currentDraft.components.filter((component) => component.id !== componentId)
     }));
+    setExpandedComponentId((currentExpandedComponentId) =>
+      currentExpandedComponentId === componentId ? null : currentExpandedComponentId
+    );
   }
 
-  function attachComponentFiles(componentId: string, event: ChangeEvent<HTMLInputElement>) {
-    const fileNames = Array.from(event.target.files ?? []).map((file) => file.name);
+  function attachPrintDesignFile(componentId: string, designId: string, event: ChangeEvent<HTMLInputElement>) {
+    const fileName = Array.from(event.target.files ?? [])
+      .map((file) => file.name)
+      .find((selectedFileName) => selectedFileName.toLowerCase().endsWith(".3mf"));
 
-    if (fileNames.length === 0) {
+    if (!fileName) {
       return;
     }
 
@@ -128,7 +261,12 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
       ...currentDraft,
       components: currentDraft.components.map((component) =>
         component.id === componentId
-          ? { ...component, technicalFiles: [...component.technicalFiles, ...fileNames] }
+          ? {
+              ...component,
+              printDesigns: component.printDesigns.map((design) =>
+                design.id === designId ? { ...design, fileName } : design
+              )
+            }
           : component
       )
     }));
@@ -138,7 +276,92 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave(draft, product);
+
+    const optionErrors = draft.components.flatMap((component) => {
+      const errors: string[] = [];
+
+      if (component.material === "OTRO") {
+        errors.push(`Especifica el material de la pieza "${component.name || "sin nombre"}".`);
+      }
+
+      if (component.color === "OTRO") {
+        errors.push(`Especifica el color de la pieza "${component.name || "sin nombre"}".`);
+      }
+
+      return errors;
+    });
+
+    const printErrors = draft.components.flatMap((component) => {
+      if (component.process !== "impresion-3d") {
+        return [];
+      }
+
+      if (component.printDesigns.length === 0) {
+        return [`La pieza "${component.name || "sin nombre"}" requiere al menos un diseño .3mf.`];
+      }
+
+      return component.printDesigns.flatMap((design, designIndex) => {
+        const errors: string[] = [];
+        const designName = design.printer.trim() || `diseño ${designIndex + 1}`;
+
+        if (!design.printer.trim()) {
+          errors.push(`La pieza "${component.name || "sin nombre"}" necesita impresora en el diseño ${designIndex + 1}.`);
+        }
+
+        if (!design.fileName.toLowerCase().endsWith(".3mf")) {
+          errors.push(`La pieza "${component.name || "sin nombre"}" necesita archivo .3mf para ${designName}.`);
+        }
+
+        return errors;
+      });
+    });
+
+    const errors = [...optionErrors, ...printErrors];
+
+    if (errors.length > 0) {
+      const firstInvalidComponent = draft.components.find((component) => {
+        if (component.material === "OTRO" || component.color === "OTRO") {
+          return true;
+        }
+
+        if (component.process !== "impresion-3d") {
+          return false;
+        }
+
+        return (
+          component.printDesigns.length === 0 ||
+          component.printDesigns.some(
+            (design) => !design.printer.trim() || !design.fileName.toLowerCase().endsWith(".3mf")
+          )
+        );
+      });
+
+      if (firstInvalidComponent) {
+        setExpandedComponentId(firstInvalidComponent.id);
+      }
+
+      setValidationErrors(errors);
+      return;
+    }
+
+    const normalizedDraft: ProductDraft = {
+      ...draft,
+      components: draft.components.map((component) => ({
+        ...component,
+        material: component.material.toUpperCase(),
+        color: component.color.toUpperCase(),
+        printDesigns:
+          component.process === "impresion-3d"
+            ? component.printDesigns.map((design) => ({
+                ...design,
+                printer: design.printer.toUpperCase()
+              }))
+            : []
+      }))
+    };
+
+    setValidationErrors([]);
+    onSave(normalizedDraft, product);
   }
 
   return (
@@ -171,7 +394,7 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
               </label>
 
               <label className="field">
-                <span>Precio base</span>
+                <span>Precio de venta</span>
                 <input
                   min="0"
                   type="number"
@@ -179,6 +402,22 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
                   onChange={(event) => updateField("basePrice", Number(event.target.value))}
                 />
               </label>
+
+              <label className="field">
+                <span>Moneda</span>
+                <select value={draft.currency} onChange={(event) => updateField("currency", event.target.value as ProductCurrency)}>
+                  {Object.entries(currencyLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="price-preview">
+                <span>Vista previa</span>
+                <strong>{formatCurrency(draft.basePrice, draft.currency)}</strong>
+              </div>
 
               <label className="field">
                 <span>Unidad de venta</span>
@@ -200,19 +439,6 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
                     </option>
                   ))}
                 </select>
-              </label>
-
-              <label className="field">
-                <span>Revisión</span>
-                <input value={draft.revision} onChange={(event) => updateField("revision", event.target.value)} />
-              </label>
-
-              <label className="field">
-                <span>Tiempo estimado</span>
-                <input
-                  value={draft.estimatedProductionTime}
-                  onChange={(event) => updateField("estimatedProductionTime", event.target.value)}
-                />
               </label>
 
               <label className="field wide-field">
@@ -253,20 +479,50 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
             </div>
 
             <div className="component-editor-list">
-              {draft.components.map((component, index) => (
-                <article className="component-editor-card" key={component.id}>
+              {draft.components.map((component, index) => {
+                const isExpanded = expandedComponentId === component.id;
+                const componentName = component.name.trim() || "Componente sin nombre";
+                const quantityLabel = `${component.quantity} ${productUnitLabels[component.unit].toLowerCase()}`;
+
+                return (
+                <article className={`component-editor-card ${isExpanded ? "expanded" : "collapsed"}`} key={component.id}>
                   <div className="component-card-header">
-                    <strong>Componente {index + 1}</strong>
-                    <button
-                      className="icon-button ghost"
-                      onClick={() => removeComponent(component.id)}
-                      type="button"
-                      aria-label="Eliminar componente"
-                    >
-                      <Trash2 size={17} />
-                    </button>
+                    {isExpanded ? (
+                      <>
+                        <strong>Componente {index + 1}</strong>
+                        <button
+                          className="icon-button ghost"
+                          onClick={() => removeComponent(component.id)}
+                          type="button"
+                          aria-label="Eliminar componente"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="component-collapsed-main">
+                          <span>Componente {index + 1}</span>
+                          <strong>{componentName}</strong>
+                        </div>
+                        <div className="component-collapsed-count">
+                          <span>Cantidad</span>
+                          <strong>{quantityLabel}</strong>
+                        </div>
+                        <button
+                          className="secondary-button compact-button"
+                          onClick={() => setExpandedComponentId(component.id)}
+                          type="button"
+                        >
+                          <Edit3 size={15} />
+                          Editar
+                        </button>
+                      </>
+                    )}
                   </div>
 
+                  {isExpanded ? (
+                    <>
                   <div className="form-grid four-columns">
                     <label className="field">
                       <span>Nombre</span>
@@ -315,9 +571,7 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
                       <span>Proceso</span>
                       <select
                         value={component.process}
-                        onChange={(event) =>
-                          updateComponent(component.id, "process", event.target.value as ProductComponentProcess)
-                        }
+                        onChange={(event) => updateComponentProcess(component.id, event.target.value as ProductComponentProcess)}
                       >
                         {Object.entries(componentProcessLabels).map(([value, label]) => (
                           <option key={value} value={value}>
@@ -328,156 +582,273 @@ export function ProductEditorModal({ product, onClose, onSave }: ProductEditorMo
                     </label>
 
                     <label className="field">
-                      <span>Estado</span>
+                      <span>MATERIAL</span>
                       <select
-                        value={component.status}
+                        value={optionValue(component.material, materialOptions)}
                         onChange={(event) =>
-                          updateComponent(component.id, "status", event.target.value as ProductComponentStatus)
+                          updateComponent(component.id, "material", event.target.value)
                         }
                       >
-                        {Object.entries(componentStatusLabels).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
+                        <option value="">SELECCIONA</option>
+                        {materialOptions.map((material) => (
+                          <option key={material} value={material}>
+                            {material}
                           </option>
                         ))}
                       </select>
                     </label>
 
-                    <label className="field">
-                      <span>Medidas</span>
-                      <input
-                        value={component.dimensions}
-                        onChange={(event) => updateComponent(component.id, "dimensions", event.target.value)}
-                      />
-                    </label>
+                    {optionValue(component.material, materialOptions) === "OTRO" && (
+                      <label className="field">
+                        <span>ESPECIFICAR MATERIAL</span>
+                        <input
+                          value={customOptionValue(component.material, materialOptions)}
+                          onChange={(event) => updateComponent(component.id, "material", event.target.value.toUpperCase())}
+                        />
+                      </label>
+                    )}
 
                     <label className="field">
-                      <span>Material</span>
-                      <input value={component.material} onChange={(event) => updateComponent(component.id, "material", event.target.value)} />
+                      <span>COLOR</span>
+                      <select
+                        value={optionValue(component.color, colorOptions)}
+                        onChange={(event) =>
+                          updateComponent(component.id, "color", event.target.value)
+                        }
+                      >
+                        <option value="">SELECCIONA</option>
+                        {colorOptions.map((color) => (
+                          <option key={color} value={color}>
+                            {color}
+                          </option>
+                        ))}
+                      </select>
                     </label>
 
-                    <label className="field">
-                      <span>Color</span>
-                      <input value={component.color} onChange={(event) => updateComponent(component.id, "color", event.target.value)} />
-                    </label>
-
-                    <label className="field">
-                      <span>Acabado</span>
-                      <input value={component.finish} onChange={(event) => updateComponent(component.id, "finish", event.target.value)} />
-                    </label>
+                    {optionValue(component.color, colorOptions) === "OTRO" && (
+                      <label className="field">
+                        <span>ESPECIFICAR COLOR</span>
+                        <input
+                          value={customOptionValue(component.color, colorOptions)}
+                          onChange={(event) => updateComponent(component.id, "color", event.target.value.toUpperCase())}
+                        />
+                      </label>
+                    )}
                   </div>
 
-                  <div className="supplier-block">
-                    <h4>Proveedor / compra</h4>
-                    <div className="form-grid four-columns">
-                      <label className="field">
-                        <span>Empresa</span>
-                        <input
-                          value={component.supplierCompany}
-                          onChange={(event) => updateComponent(component.id, "supplierCompany", event.target.value)}
-                        />
-                      </label>
+                  {(component.process === "comprado" || component.process === "servicio-externo") && (
+                    <div className="supplier-block">
+                      <h4>Proveedor / compra</h4>
+                      <div className="supplier-mode-row">
+                        <label className="checkbox-field supplier-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={component.needsSupplierResearch}
+                            onChange={(event) => updateSupplierResearch(component.id, event.target.checked)}
+                          />
+                          <span>
+                            <strong>Sin proveedor</strong>
+                            <small>Compras investigará con quién comprar esta pieza.</small>
+                          </span>
+                        </label>
 
-                      <label className="field">
-                        <span>Contacto</span>
-                        <input
-                          value={component.supplierContact}
-                          onChange={(event) => updateComponent(component.id, "supplierContact", event.target.value)}
-                        />
-                      </label>
+                        {component.needsSupplierResearch ? (
+                          <span className="supplier-pending-pill">Pendiente de compras</span>
+                        ) : null}
+                      </div>
 
-                      <label className="field">
-                        <span>Correo</span>
-                        <input
-                          value={component.supplierEmail}
-                          onChange={(event) => updateComponent(component.id, "supplierEmail", event.target.value)}
-                        />
-                      </label>
+                      {component.needsSupplierResearch ? (
+                        <label className="field supplier-notes-field">
+                          <span>Notas para compras</span>
+                          <textarea
+                            value={component.supplierResearchNotes}
+                            onChange={(event) => updateComponent(component.id, "supplierResearchNotes", event.target.value)}
+                            placeholder="Ej. buscar proveedor nacional, revisar material, pedir cotización por volumen..."
+                          />
+                        </label>
+                      ) : (
+                        <div className="form-grid four-columns">
+                        <label className="field">
+                          <span>Empresa</span>
+                          <input
+                            value={component.supplierCompany}
+                            onChange={(event) => updateComponent(component.id, "supplierCompany", event.target.value)}
+                          />
+                        </label>
 
-                      <label className="field">
-                        <span>Teléfono</span>
-                        <input
-                          value={component.supplierPhone}
-                          onChange={(event) => updateComponent(component.id, "supplierPhone", event.target.value)}
-                        />
-                      </label>
+                        <label className="field">
+                          <span>Contacto</span>
+                          <input
+                            value={component.supplierContact}
+                            onChange={(event) => updateComponent(component.id, "supplierContact", event.target.value)}
+                          />
+                        </label>
 
-                      <label className="field">
-                        <span>No. parte proveedor</span>
-                        <input
-                          value={component.supplierPartNumber}
-                          onChange={(event) => updateComponent(component.id, "supplierPartNumber", event.target.value)}
-                        />
-                      </label>
+                        <label className="field">
+                          <span>Correo</span>
+                          <input
+                            value={component.supplierEmail}
+                            onChange={(event) => updateComponent(component.id, "supplierEmail", event.target.value)}
+                          />
+                        </label>
 
-                      <label className="field">
-                        <span>Costo unitario</span>
-                        <input
-                          min="0"
-                          type="number"
-                          value={component.unitCost}
-                          onChange={(event) => updateComponent(component.id, "unitCost", Number(event.target.value))}
-                        />
-                      </label>
+                        <label className="field">
+                          <span>Teléfono</span>
+                          <input
+                            value={component.supplierPhone}
+                            onChange={(event) => updateComponent(component.id, "supplierPhone", event.target.value)}
+                          />
+                        </label>
 
-                      <label className="field">
-                        <span>Tiempo entrega</span>
-                        <input value={component.leadTime} onChange={(event) => updateComponent(component.id, "leadTime", event.target.value)} />
-                      </label>
+                        <label className="field">
+                          <span>No. parte proveedor</span>
+                          <input
+                            value={component.supplierPartNumber}
+                            onChange={(event) => updateComponent(component.id, "supplierPartNumber", event.target.value)}
+                          />
+                        </label>
 
-                      <label className="field">
-                        <span>Mínimo compra</span>
-                        <input
-                          value={component.minimumPurchaseQuantity}
-                          onChange={(event) => updateComponent(component.id, "minimumPurchaseQuantity", event.target.value)}
-                        />
-                      </label>
+                        <label className="field">
+                          <span>Costo unitario</span>
+                          <input
+                            min="0"
+                            type="number"
+                            value={component.unitCost}
+                            onChange={(event) => updateComponent(component.id, "unitCost", Number(event.target.value))}
+                          />
+                        </label>
 
-                      <label className="field wide-field">
-                        <span>Link o referencia</span>
-                        <input
-                          value={component.referenceLink}
-                          onChange={(event) => updateComponent(component.id, "referenceLink", event.target.value)}
-                        />
-                      </label>
+                        <label className="field">
+                          <span>Tiempo entrega</span>
+                          <input value={component.leadTime} onChange={(event) => updateComponent(component.id, "leadTime", event.target.value)} />
+                        </label>
+
+                        <label className="field">
+                          <span>Mínimo compra</span>
+                          <input
+                            value={component.minimumPurchaseQuantity}
+                            onChange={(event) => updateComponent(component.id, "minimumPurchaseQuantity", event.target.value)}
+                          />
+                        </label>
+
+                        <label className="field wide-field">
+                          <span>Link o referencia</span>
+                          <input
+                            value={component.referenceLink}
+                            onChange={(event) => updateComponent(component.id, "referenceLink", event.target.value)}
+                          />
+                        </label>
+                      </div>
+                      )}
                     </div>
-                  </div>
+                  )}
 
-                  <div className="form-grid two-columns">
-                    <div className="field">
-                      <span>Archivos técnicos</span>
-                      <label className="secondary-button input-height-button file-button">
-                        <FileUp size={16} />
-                        Subir STL / STEP / PDF
-                        <input
-                          hidden
-                          multiple
-                          type="file"
-                          accept=".stl,.step,.stp,.pdf,.dwg,.dxf,.png,.jpg,.jpeg"
-                          onChange={(event) => attachComponentFiles(component.id, event)}
-                        />
-                      </label>
+                  {component.process === "impresion-3d" && (
+                    <div className="print-design-block">
+                      <div className="component-heading compact-heading">
+                        <div>
+                          <h4>Diseños 3MF por impresora</h4>
+                          <p>Cada diseño debe indicar impresora y archivo .3MF.</p>
+                        </div>
+                        <button className="secondary-button compact-button" onClick={() => addPrintDesign(component.id)} type="button">
+                          <Plus size={15} />
+                          Agregar diseño para otra impresora
+                        </button>
+                      </div>
+
+                      <div className="print-design-list">
+                        {component.printDesigns.map((design) => (
+                          <article className="print-design-row" key={design.id}>
+                            <label className="field">
+                              <span>IMPRESORA</span>
+                              <select
+                                value={printerOptions.includes(design.printer as (typeof printerOptions)[number]) ? design.printer : "OTRA"}
+                                onChange={(event) =>
+                                  updatePrintDesign(
+                                    component.id,
+                                    design.id,
+                                    "printer",
+                                    event.target.value === "OTRA" ? "" : event.target.value
+                                  )
+                                }
+                              >
+                                {printerOptions.map((printer) => (
+                                  <option key={printer} value={printer}>
+                                    {printer}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            {design.printer !== "P1S" && (
+                              <label className="field">
+                                <span>ESPECIFICAR IMPRESORA</span>
+                                <input
+                                  value={design.printer === "OTRA" ? "" : design.printer}
+                                  onChange={(event) =>
+                                    updatePrintDesign(component.id, design.id, "printer", event.target.value.toUpperCase())
+                                  }
+                                />
+                              </label>
+                            )}
+
+                            <div className="field">
+                              <span>ARCHIVO 3MF</span>
+                              <label className="secondary-button input-height-button file-button">
+                                <FileUp size={16} />
+                                {design.fileName || "Subir archivo .3mf"}
+                                <input
+                                  hidden
+                                  type="file"
+                                  accept=".3mf"
+                                  onChange={(event) => attachPrintDesignFile(component.id, design.id, event)}
+                                />
+                              </label>
+                            </div>
+
+                            <label className="field">
+                              <span>Notas</span>
+                              <input
+                                value={design.notes}
+                                onChange={(event) => updatePrintDesign(component.id, design.id, "notes", event.target.value)}
+                              />
+                            </label>
+
+                            <button
+                              className="icon-button ghost"
+                              onClick={() => removePrintDesign(component.id, design.id)}
+                              type="button"
+                              aria-label="Eliminar diseño"
+                            >
+                              <Trash2 size={17} />
+                            </button>
+                          </article>
+                        ))}
+                      </div>
                     </div>
+                  )}
 
-                    <label className="field">
-                      <span>Notas del componente</span>
-                      <textarea value={component.notes} onChange={(event) => updateComponent(component.id, "notes", event.target.value)} />
-                    </label>
-                  </div>
-
-                  {component.technicalFiles.length > 0 ? (
-                    <div className="component-file-list">
-                      {component.technicalFiles.map((fileName) => (
-                        <span key={fileName}>{fileName}</span>
-                      ))}
-                    </div>
+                  <label className="field">
+                    <span>Notas del componente</span>
+                    <textarea value={component.notes} onChange={(event) => updateComponent(component.id, "notes", event.target.value)} />
+                  </label>
+                    </>
                   ) : null}
                 </article>
-              ))}
+                );
+              })}
 
               {draft.components.length === 0 ? <p className="empty-state">Sin componentes definidos.</p> : null}
             </div>
           </section>
+
+          {validationErrors.length > 0 ? (
+            <div className="form-error-list" role="alert">
+              {validationErrors.map((error) => (
+                <span key={error}>{error}</span>
+              ))}
+            </div>
+          ) : null}
 
           <footer className="modal-actions">
             <button className="secondary-button" onClick={onClose} type="button">

@@ -8,8 +8,8 @@ import type {
   PaymentTerm,
   Priority,
   Product,
+  ProductCurrency,
   ProductComponentProcess,
-  ProductComponentStatus,
   ProductComponentType,
   SalesOrder,
   SalesUser
@@ -65,7 +65,6 @@ export const documentTypeLabels: Record<DocumentType, string> = {
 export const productStatusLabels: Record<Product["status"], string> = {
   borrador: "Borrador",
   activo: "Activo",
-  revision: "En revisión",
   inactivo: "Inactivo"
 };
 
@@ -75,6 +74,16 @@ export const productUnitLabels: Record<Product["unit"], string> = {
   kg: "Kg",
   set: "Set"
 };
+
+export const currencyLabels: Record<ProductCurrency, string> = {
+  MXN: "MXN - PESOS",
+  USD: "USD - DOLARES",
+  EUR: "EUR - EUROS"
+};
+
+export const materialOptions = ["PLA", "PETG", "TPU", "OTRO"] as const;
+
+export const colorOptions = ["NEGRO", "BLANCO", "AZUL", "OTRO"] as const;
 
 export const componentTypeLabels: Record<ProductComponentType, string> = {
   "pieza-impresa-3d": "Pieza impresa 3D",
@@ -99,12 +108,6 @@ export const componentProcessLabels: Record<ProductComponentProcess, string> = {
   pendiente: "Pendiente"
 };
 
-export const componentStatusLabels: Record<ProductComponentStatus, string> = {
-  pendiente: "Pendiente",
-  revision: "En revisión",
-  aprobado: "Aprobado"
-};
-
 export function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}`;
 }
@@ -113,11 +116,14 @@ export function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN"
+export function formatCurrency(value: number, currency: ProductCurrency = "MXN") {
+  const symbol = currency === "EUR" ? "€" : "$";
+  const amount = new Intl.NumberFormat("es-MX", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(value);
+
+  return `${symbol}${amount} ${currency}`;
 }
 
 export function formatDateTime(value: string) {
@@ -179,7 +185,10 @@ export function productMatches(product: Product, query: string) {
       component.name,
       component.material,
       component.supplierCompany,
-      component.supplierPartNumber
+      component.supplierPartNumber,
+      component.needsSupplierResearch ? "sin proveedor pendiente compras" : "",
+      component.supplierResearchNotes,
+      ...component.printDesigns.flatMap((design) => [design.printer, design.fileName])
     ])
   ];
 

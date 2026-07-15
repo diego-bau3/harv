@@ -62,7 +62,6 @@ export function ProductModal({ products, onClose, onSelect }: ProductModalProps)
             <select value={status} onChange={(event) => setStatus(event.target.value as ProductStatus | "todos")}>
               <option value="activo">Activo</option>
               <option value="borrador">Borrador</option>
-              <option value="revision">En revisión</option>
               <option value="inactivo">Inactivo</option>
               <option value="todos">Todos</option>
             </select>
@@ -79,7 +78,7 @@ export function ProductModal({ products, onClose, onSelect }: ProductModalProps)
               </div>
               <div className="product-meta">
                 <span>{product.category}</span>
-                <span>{formatCurrency(product.basePrice)}</span>
+                <span>{formatCurrency(product.basePrice, product.currency)}</span>
                 <span className={`status-pill ${product.status}`}>{productStatusLabels[product.status]}</span>
               </div>
               <button

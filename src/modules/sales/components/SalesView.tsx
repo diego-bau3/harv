@@ -24,6 +24,7 @@ import type {
   PaymentTerm,
   Priority,
   Product,
+  ProductCurrency,
   SalesDocument,
   SalesOrder
 } from "../types";
@@ -72,6 +73,10 @@ function withHistory(currentOrder: SalesOrder, nextOrder: SalesOrder, action: st
   };
 }
 
+function currencyForLines(lines: OrderLine[]): ProductCurrency {
+  return lines[0]?.product.currency ?? "MXN";
+}
+
 export function SalesView({ onBack, products }: SalesViewProps) {
   const [clients, setClients] = useState<Client[]>(() => initialClients);
   const [order, setOrder] = useState<SalesOrder>(() => createInitialOrder(salesUser));
@@ -92,6 +97,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
   }, [clientQuery, clients]);
 
   const totals = useMemo(() => orderTotals(order.lines), [order.lines]);
+  const orderCurrency = currencyForLines(order.lines);
   const evaluation = useMemo(() => evaluateOrder(order, selectedClient), [order, selectedClient]);
   const missingItems = evaluation.checklist.filter((item) => !item.passed);
 
@@ -547,7 +553,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
                       <div className="line-product">
                         <strong>{line.product.name}</strong>
                         <span>
-                          {line.product.sku} · {line.product.unit}
+                          {line.product.sku} · {line.product.unit} · {line.product.currency}
                         </span>
                       </div>
                       <input
@@ -573,7 +579,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
                             line.id,
                             { unitPrice: Number(event.target.value) },
                             "Precio modificado",
-                            `${line.product.sku}: ${formatCurrency(Number(event.target.value))}`
+                            `${line.product.sku}: ${formatCurrency(Number(event.target.value), line.product.currency)}`
                           )
                         }
                       />
@@ -586,11 +592,11 @@ export function SalesView({ onBack, products }: SalesViewProps) {
                             line.id,
                             { discount: Number(event.target.value) },
                             "Descuento modificado",
-                            `${line.product.sku}: ${formatCurrency(Number(event.target.value))}`
+                            `${line.product.sku}: ${formatCurrency(Number(event.target.value), line.product.currency)}`
                           )
                         }
                       />
-                      <strong>{formatCurrency(lineSubtotal(line))}</strong>
+                      <strong>{formatCurrency(lineSubtotal(line), line.product.currency)}</strong>
                       <input
                         value={line.notes}
                         onChange={(event) =>
@@ -730,15 +736,15 @@ export function SalesView({ onBack, products }: SalesViewProps) {
             <aside className="order-total-card">
               <div>
                 <span>Subtotal</span>
-                <strong>{formatCurrency(totals.subtotal)}</strong>
+                <strong>{formatCurrency(totals.subtotal, orderCurrency)}</strong>
               </div>
               <div>
                 <span>Impuestos</span>
-                <strong>{formatCurrency(totals.taxes)}</strong>
+                <strong>{formatCurrency(totals.taxes, orderCurrency)}</strong>
               </div>
               <div className="grand-total">
                 <span>Total</span>
-                <strong>{formatCurrency(totals.total)}</strong>
+                <strong>{formatCurrency(totals.total, orderCurrency)}</strong>
               </div>
 
               {missingItems.length > 0 ? (
@@ -776,6 +782,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
             {generatedOrders.map((generatedOrder) => {
               const generatedClient = clients.find((client) => client.id === generatedOrder.selectedClientId);
               const generatedTotal = orderTotals(generatedOrder.lines).total;
+              const generatedCurrency = currencyForLines(generatedOrder.lines);
 
               return (
                 <article className="generated-order-row" key={generatedOrder.folio}>
@@ -789,7 +796,7 @@ export function SalesView({ onBack, products }: SalesViewProps) {
                   </div>
                   <div>
                     <span>Total</span>
-                    <strong>{formatCurrency(generatedTotal)}</strong>
+                    <strong>{formatCurrency(generatedTotal, generatedCurrency)}</strong>
                   </div>
                   <div>
                     <span>Entrega</span>

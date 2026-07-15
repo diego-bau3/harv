@@ -4,9 +4,11 @@ export type PaymentTerm = "contado" | "credito" | "anticipo" | "pendiente";
 
 export type PaymentMethod = "transferencia" | "tarjeta" | "efectivo" | "credito" | "por-definir";
 
-export type ProductStatus = "borrador" | "activo" | "revision" | "inactivo";
+export type ProductStatus = "borrador" | "activo" | "inactivo";
 
 export type ProductUnit = "pieza" | "metro" | "kg" | "set";
+
+export type ProductCurrency = "MXN" | "USD" | "EUR";
 
 export type ProductComponentType =
   | "pieza-impresa-3d"
@@ -28,8 +30,6 @@ export type ProductComponentProcess =
   | "cableado"
   | "servicio-externo"
   | "pendiente";
-
-export type ProductComponentStatus = "pendiente" | "revision" | "aprobado";
 
 export type Priority = "normal" | "alta" | "urgente" | "critica";
 
@@ -79,10 +79,9 @@ export type Product = {
   shortDescription: string;
   category: string;
   basePrice: number;
+  currency: ProductCurrency;
   unit: ProductUnit;
   status: ProductStatus;
-  revision: string;
-  estimatedProductionTime: string;
   commercialNotes: string;
   technicalNotes: string;
   components: ProductComponent[];
@@ -95,11 +94,8 @@ export type ProductComponent = {
   quantity: number;
   unit: ProductUnit;
   process: ProductComponentProcess;
-  status: ProductComponentStatus;
-  dimensions: string;
   material: string;
   color: string;
-  finish: string;
   supplierCompany: string;
   supplierContact: string;
   supplierEmail: string;
@@ -109,7 +105,16 @@ export type ProductComponent = {
   leadTime: string;
   minimumPurchaseQuantity: string;
   referenceLink: string;
-  technicalFiles: string[];
+  needsSupplierResearch: boolean;
+  supplierResearchNotes: string;
+  printDesigns: ProductPrintDesign[];
+  notes: string;
+};
+
+export type ProductPrintDesign = {
+  id: string;
+  printer: string;
+  fileName: string;
   notes: string;
 };
 

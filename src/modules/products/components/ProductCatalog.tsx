@@ -54,8 +54,8 @@ export function ProductCatalog({ products, onSaveProduct }: ProductCatalogProps)
             </div>
 
             <div className="product-catalog-stat">
-              <span>Precio</span>
-              <strong>{formatCurrency(product.basePrice)}</strong>
+              <span>Precio de venta</span>
+              <strong>{formatCurrency(product.basePrice, product.currency)}</strong>
             </div>
 
             <span className={`status-pill ${product.status}`}>{productStatusLabels[product.status]}</span>
