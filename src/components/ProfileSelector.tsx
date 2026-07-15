@@ -1,15 +1,22 @@
+import { PackageSearch } from "lucide-react";
 import { profiles, type Profile } from "../data/profiles";
-import { ProductCatalog } from "../modules/products/components/ProductCatalog";
-import type { Product } from "../modules/sales/types";
 import { ProfileCard } from "./ProfileCard";
 
 type ProfileSelectorProps = {
-  products: Product[];
-  onSaveProduct: (product: Omit<Product, "id">, existingProduct?: Product) => void;
+  onOpenProducts: () => void;
   onSelect: (profile: Profile) => void;
 };
 
-export function ProfileSelector({ products, onSaveProduct, onSelect }: ProfileSelectorProps) {
+const productProfile: Profile = {
+  id: "productos",
+  name: "Productos",
+  note: "Catálogo técnico",
+  icon: PackageSearch,
+  accent: "#8f4a31",
+  tint: "#fff0e5"
+};
+
+export function ProfileSelector({ onOpenProducts, onSelect }: ProfileSelectorProps) {
   return (
     <main className="profile-selector">
       <section className="selector-header" aria-labelledby="app-title">
@@ -21,9 +28,8 @@ export function ProfileSelector({ products, onSaveProduct, onSelect }: ProfileSe
         {profiles.map((profile) => (
           <ProfileCard key={profile.id} profile={profile} onSelect={onSelect} />
         ))}
+        <ProfileCard profile={productProfile} onSelect={onOpenProducts} />
       </section>
-
-      <ProductCatalog products={products} onSaveProduct={onSaveProduct} />
     </main>
   );
 }
