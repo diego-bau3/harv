@@ -14,7 +14,7 @@ import {
   UserRound
 } from "lucide-react";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { initialClients, productCatalog, salesUser } from "../data";
+import { initialClients, salesUser } from "../data";
 import type {
   Client,
   DocumentType,
@@ -31,7 +31,6 @@ import {
   calculateClientStatus,
   clientMatches,
   clientStatusLabels,
-  componentTypeLabels,
   createId,
   createInitialOrder,
   documentTypeLabels,
@@ -44,20 +43,17 @@ import {
   orderTotals,
   paymentMethodLabels,
   paymentTermLabels,
-  priorityLabels,
-  productMatches,
-  productStatusLabels
+  priorityLabels
 } from "../utils";
 import { ClientModal } from "./ClientModal";
-import { ProductEditorModal } from "./ProductEditorModal";
 import { ProductModal } from "./ProductModal";
 
 type SalesViewProps = {
   onBack: () => void;
+  products: Product[];
 };
 
 type ClientDraft = Omit<Client, "id" | "status">;
-type ProductDraft = Omit<Product, "id">;
 
 function createHistory(action: string, detail: string): HistoryEvent {
   return {
@@ -76,15 +72,12 @@ function withHistory(currentOrder: SalesOrder, nextOrder: SalesOrder, action: st
   };
 }
 
-export function SalesView({ onBack }: SalesViewProps) {
+export function SalesView({ onBack, products }: SalesViewProps) {
   const [clients, setClients] = useState<Client[]>(() => initialClients);
-  const [products, setProducts] = useState<Product[]>(() => productCatalog);
   const [order, setOrder] = useState<SalesOrder>(() => createInitialOrder(salesUser));
   const [generatedOrders, setGeneratedOrders] = useState<SalesOrder[]>([]);
   const [clientQuery, setClientQuery] = useState("");
-  const [productQuery, setProductQuery] = useState("");
   const [clientModal, setClientModal] = useState<{ client?: Client } | null>(null);
-  const [productEditorModal, setProductEditorModal] = useState<{ product?: Product } | null>(null);
   const [isProductModalOpen, setProductModalOpen] = useState(false);
   const [documentType, setDocumentType] = useState<DocumentType>("orden-compra-cliente");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -97,10 +90,6 @@ export function SalesView({ onBack }: SalesViewProps) {
   const clientResults = useMemo(() => {
     return clients.filter((client) => clientMatches(client, clientQuery));
   }, [clientQuery, clients]);
-
-  const productResults = useMemo(() => {
-    return products.filter((product) => productMatches(product, productQuery));
-  }, [productQuery, products]);
 
   const totals = useMemo(() => orderTotals(order.lines), [order.lines]);
   const evaluation = useMemo(() => evaluateOrder(order, selectedClient), [order, selectedClient]);
@@ -157,31 +146,6 @@ export function SalesView({ onBack }: SalesViewProps) {
 
     setClientModal(null);
     setClientQuery("");
-  }
-
-  function saveProduct(draft: ProductDraft, existingProduct?: Product) {
-    const savedProduct: Product = {
-      ...draft,
-      id: existingProduct?.id ?? createId("product")
-    };
-
-    setProducts((currentProducts) => {
-      if (existingProduct) {
-        return currentProducts.map((product) => (product.id === existingProduct.id ? savedProduct : product));
-      }
-
-      return [savedProduct, ...currentProducts];
-    });
-
-    setOrder((currentOrder) => ({
-      ...currentOrder,
-      lines: currentOrder.lines.map((line) =>
-        line.product.id === savedProduct.id ? { ...line, product: savedProduct, unitPrice: savedProduct.basePrice } : line
-      )
-    }));
-
-    setProductEditorModal(null);
-    setProductQuery("");
   }
 
   function addProduct(product: Product) {
@@ -450,73 +414,6 @@ export function SalesView({ onBack }: SalesViewProps) {
             {clients.length === 0 ? <p className="empty-state">Todavía no hay clientes registrados.</p> : null}
             {clients.length > 0 && clientResults.length === 0 ? (
               <p className="empty-state">No hay clientes con esa búsqueda.</p>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="sales-panel products-panel">
-          <div className="clean-section-heading">
-            <div>
-              <h2>Lista de productos</h2>
-              <p>Define productos, piezas, tornillería, motores, cableado y archivos técnicos.</p>
-            </div>
-            <button className="primary-button" onClick={() => setProductEditorModal({})} type="button">
-              <PackagePlus size={17} />
-              Agregar producto
-            </button>
-          </div>
-
-          <label className="search-field client-search">
-            <Search size={18} aria-hidden="true" />
-            <input
-              value={productQuery}
-              onChange={(event) => setProductQuery(event.target.value)}
-              placeholder="Buscar producto, SKU, componente o proveedor"
-            />
-          </label>
-
-          <div className="product-catalog-list">
-            {productResults.map((product) => (
-              <article className="product-catalog-row" key={product.id}>
-                <div className="product-catalog-main">
-                  <span className="sku">{product.sku || "Sin SKU"}</span>
-                  <div>
-                    <strong>{product.name || "Producto sin nombre"}</strong>
-                    <p>{product.shortDescription || "Sin descripción"}</p>
-                  </div>
-                </div>
-
-                <div className="product-catalog-stat">
-                  <span>Componentes</span>
-                  <strong>{product.components.length}</strong>
-                </div>
-
-                <div className="product-catalog-stat">
-                  <span>Precio</span>
-                  <strong>{formatCurrency(product.basePrice)}</strong>
-                </div>
-
-                <span className={`status-pill ${product.status}`}>{productStatusLabels[product.status]}</span>
-
-                <div className="product-component-preview">
-                  {product.components.slice(0, 4).map((component) => (
-                    <span key={component.id}>{componentTypeLabels[component.type]}</span>
-                  ))}
-                  {product.components.length > 4 ? <span>+{product.components.length - 4}</span> : null}
-                </div>
-
-                <div className="client-actions">
-                  <button className="secondary-button compact-button" onClick={() => setProductEditorModal({ product })} type="button">
-                    <Edit3 size={15} />
-                    Editar
-                  </button>
-                </div>
-              </article>
-            ))}
-
-            {products.length === 0 ? <p className="empty-state">Todavía no hay productos registrados.</p> : null}
-            {products.length > 0 && productResults.length === 0 ? (
-              <p className="empty-state">No hay productos con esa búsqueda.</p>
             ) : null}
           </div>
         </section>
@@ -910,14 +807,6 @@ export function SalesView({ onBack }: SalesViewProps) {
 
       {clientModal ? (
         <ClientModal client={clientModal.client} onClose={() => setClientModal(null)} onSave={saveClient} />
-      ) : null}
-
-      {productEditorModal ? (
-        <ProductEditorModal
-          product={productEditorModal.product}
-          onClose={() => setProductEditorModal(null)}
-          onSave={saveProduct}
-        />
       ) : null}
 
       {isProductModalOpen ? <ProductModal products={products} onClose={() => setProductModalOpen(false)} onSelect={addProduct} /> : null}

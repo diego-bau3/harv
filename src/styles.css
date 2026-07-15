@@ -65,6 +65,16 @@ button {
   margin: 0 auto;
 }
 
+.profile-selector .main-panel {
+  width: min(1180px, 100%);
+  margin: 28px auto 0;
+  border: 1px solid rgba(87, 54, 37, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 42px rgba(116, 66, 29, 0.1);
+  padding: 18px;
+}
+
 .profile-card {
   --accent: #9a4d32;
   --tint: #fff0e4;

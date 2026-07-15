@@ -8,7 +8,7 @@ import type {
   ProductComponentType,
   ProductStatus,
   ProductUnit
-} from "../types";
+} from "../../sales/types";
 import {
   componentProcessLabels,
   componentStatusLabels,
@@ -16,7 +16,7 @@ import {
   createId,
   productStatusLabels,
   productUnitLabels
-} from "../utils";
+} from "../../sales/utils";
 
 type ProductDraft = Omit<Product, "id">;
 

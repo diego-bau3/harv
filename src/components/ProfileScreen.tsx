@@ -1,17 +1,19 @@
 import { ArrowLeft } from "lucide-react";
 import type { Profile } from "../data/profiles";
 import { SalesView } from "../modules/sales/components/SalesView";
+import type { Product } from "../modules/sales/types";
 
 type ProfileScreenProps = {
   profile: Profile;
+  products: Product[];
   onBack: () => void;
 };
 
-export function ProfileScreen({ profile, onBack }: ProfileScreenProps) {
+export function ProfileScreen({ profile, products, onBack }: ProfileScreenProps) {
   const Icon = profile.icon;
 
   if (profile.id === "ventas") {
-    return <SalesView onBack={onBack} />;
+    return <SalesView products={products} onBack={onBack} />;
   }
 
   return (
