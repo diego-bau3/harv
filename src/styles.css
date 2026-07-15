@@ -350,6 +350,268 @@ button {
   padding: 18px;
 }
 
+.sales-workspace {
+  display: grid;
+  gap: 18px;
+  width: min(1320px, 100%);
+  margin: 0 auto;
+  padding: 22px clamp(14px, 2.8vw, 32px) 34px;
+}
+
+.sales-panel {
+  min-width: 0;
+  border: 1px solid #eee1d7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(99, 59, 32, 0.06);
+  padding: 18px;
+}
+
+.clean-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.clean-section-heading h2 {
+  margin: 0;
+  color: #2d231e;
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  letter-spacing: 0;
+  line-height: 1.12;
+}
+
+.clean-section-heading p {
+  margin: 5px 0 0;
+  color: #7a665c;
+  font-size: 0.92rem;
+  font-weight: 620;
+}
+
+.client-search {
+  margin-bottom: 12px;
+}
+
+.client-clean-list,
+.generated-orders-list {
+  display: grid;
+  gap: 10px;
+}
+
+.client-clean-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #eee2d8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.client-clean-row.selected {
+  border-color: #c98e6a;
+  background: #fff8f1;
+}
+
+.client-clean-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.client-clean-copy strong {
+  overflow-wrap: anywhere;
+  color: #2d231e;
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.client-clean-copy span {
+  overflow-wrap: anywhere;
+  color: #7a665c;
+  font-size: 0.84rem;
+  font-weight: 640;
+}
+
+.client-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.order-builder-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 248, 240, 0.62), rgba(255, 255, 255, 0) 190px),
+    #ffffff;
+}
+
+.order-builder-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  align-items: start;
+  gap: 18px;
+}
+
+.order-capture {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.order-meta-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.order-meta-strip div,
+.order-total-card {
+  border: 1px solid #eee2d8;
+  border-radius: 8px;
+  background: rgba(255, 253, 251, 0.92);
+}
+
+.order-meta-strip div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.order-meta-strip span,
+.order-total-card span,
+.generated-order-row span {
+  color: #7a665c;
+  font-size: 0.74rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.order-meta-strip strong,
+.order-total-card strong,
+.generated-order-row strong {
+  overflow-wrap: anywhere;
+  color: #2d231e;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.input-height-button {
+  width: 100%;
+  min-height: 42px;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
+}
+
+.clean-line-items {
+  background: #ffffff;
+}
+
+.order-total-card {
+  position: sticky;
+  top: 96px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.order-total-card > div:not(.order-missing, .order-ready) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #f0e4dc;
+  padding-bottom: 10px;
+}
+
+.order-total-card .grand-total {
+  border-bottom: 0;
+  border-radius: 8px;
+  background: #fff3e8;
+  padding: 13px;
+}
+
+.grand-total strong {
+  color: #8f4a31;
+  font-size: 1.35rem;
+}
+
+.order-missing,
+.order-ready {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.86rem;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.order-missing span,
+.order-ready span {
+  font-size: 0.84rem;
+  text-transform: none;
+}
+
+.order-missing {
+  background: #fff8ee;
+  color: #84552d;
+}
+
+.order-ready {
+  background: #eef8f0;
+  color: #2f7045;
+}
+
+.generate-order-button {
+  margin-top: 0;
+}
+
+.clean-credit-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.compact-document-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compact-document-list span {
+  border: 1px solid #eee2d8;
+  border-radius: 999px;
+  background: #fffaf6;
+  color: #6f5b50;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.generated-order-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.4fr) minmax(110px, 0.8fr) minmax(110px, 0.8fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #eee2d8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 13px;
+}
+
+.generated-order-row div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
