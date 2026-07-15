@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Search,
   Settings2,
+  Trash2,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -19,6 +20,7 @@ import { createId, todayIso } from "../../sales/utils";
 import { defaultWarehouseLayoutConfig, initialWarehouseEntries } from "../data";
 import type {
   WarehouseEntry,
+  WarehouseEntryAllocation,
   WarehouseEntryDraft,
   WarehouseEntryStatus,
   WarehouseLayoutConfig,
@@ -57,6 +59,7 @@ type ComponentOption = {
 
 const entriesStorageKey = "harv:warehouse-entries:v2";
 const layoutStorageKey = "harv:warehouse-layout:v1";
+const quantityTolerance = 0.001;
 
 function getActiveRows(layoutConfig: WarehouseLayoutConfig) {
   return layoutConfig.mode === "personalizado"
@@ -98,6 +101,42 @@ function getMapPositionLabel(location: WarehouseLocation) {
   return `${level} ${bin}`;
 }
 
+function createAllocation(locationId: string, quantity = 1): WarehouseEntryAllocation {
+  return {
+    id: createId("allocation"),
+    locationId,
+    quantity
+  };
+}
+
+function getAllocationTotal(allocations: WarehouseEntryAllocation[]) {
+  return allocations.reduce((total, allocation) => total + Number(allocation.quantity || 0), 0);
+}
+
+function normalizeStoredAllocations(entry: Partial<WarehouseEntry>, fallbackLocationId: string) {
+  const fallbackEntryLocationId = entry.locationId || fallbackLocationId;
+  const storedAllocations = Array.isArray(entry.allocations) ? entry.allocations : [];
+  const normalizedAllocations = storedAllocations
+    .map((allocation) => ({
+      id: allocation.id || createId("allocation"),
+      locationId: allocation.locationId || fallbackEntryLocationId,
+      quantity: Number(allocation.quantity ?? 0)
+    }))
+    .filter((allocation) => allocation.locationId && allocation.quantity > 0);
+
+  if (normalizedAllocations.length > 0) {
+    return normalizedAllocations;
+  }
+
+  const fallbackQuantity = Number(entry.quantity ?? 0);
+
+  if (!fallbackEntryLocationId || fallbackQuantity <= 0) {
+    return [];
+  }
+
+  return [createAllocation(fallbackEntryLocationId, fallbackQuantity)];
+}
+
 function createEmptyDraft(locationId: string): WarehouseEntryDraft {
   return {
     receivedAt: todayIso(),
@@ -109,6 +148,8 @@ function createEmptyDraft(locationId: string): WarehouseEntryDraft {
     expectedArrivalDate: "",
     unit: "pieza",
     locationId,
+    maxPerLocation: 0,
+    allocations: [createAllocation(locationId, 1)],
     supplier: "",
     receivedBy: "",
     status: "disponible",
@@ -117,15 +158,21 @@ function createEmptyDraft(locationId: string): WarehouseEntryDraft {
 }
 
 function normalizeStoredEntry(entry: Partial<WarehouseEntry>, fallbackLocationId: string): WarehouseEntry {
+  const allocations = normalizeStoredAllocations(entry, fallbackLocationId);
+  const locationId = allocations[0]?.locationId ?? entry.locationId ?? fallbackLocationId;
+
   return {
     ...createEmptyDraft(fallbackLocationId),
     ...entry,
     id: entry.id ?? createId("entry"),
+    locationId,
     itemName: entry.itemName ?? "",
     sku: entry.sku ?? "",
     quantity: Number(entry.quantity ?? 0),
     incomingQuantity: Number(entry.incomingQuantity ?? 0),
     expectedArrivalDate: entry.expectedArrivalDate ?? "",
+    maxPerLocation: Number(entry.maxPerLocation ?? 0),
+    allocations,
     supplier: entry.supplier ?? "",
     receivedBy: entry.receivedBy ?? "",
     notes: entry.notes ?? ""
@@ -206,13 +253,18 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
     }
 
     setDraft((currentDraft) => {
-      if (warehouseLocations.some((location) => location.id === currentDraft.locationId)) {
-        return currentDraft;
-      }
+      const validLocationIds = new Set(warehouseLocations.map((location) => location.id));
+      const locationId = validLocationIds.has(currentDraft.locationId) ? currentDraft.locationId : defaultLocationId;
+      const allocations = currentDraft.allocations.length
+        ? currentDraft.allocations.map((allocation) =>
+            validLocationIds.has(allocation.locationId) ? allocation : { ...allocation, locationId }
+          )
+        : [createAllocation(locationId, currentDraft.quantity || 1)];
 
       return {
         ...currentDraft,
-        locationId: defaultLocationId
+        locationId,
+        allocations
       };
     });
   }, [defaultLocationId, selectedLocationId, warehouseLocations]);
@@ -245,10 +297,117 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
   const entriesToday = entries.filter((entry) => entry.receivedAt === todayIso()).length;
   const totalQuantity = entries.reduce((total, entry) => total + entry.quantity, 0);
   const incomingQuantity = entries.reduce((total, entry) => total + entry.incomingQuantity, 0);
-  const usedLocations = new Set(entries.map((entry) => entry.locationId)).size;
+  const usedLocations = new Set(
+    entries.flatMap((entry) => entry.allocations.map((allocation) => allocation.locationId))
+  ).size;
+  const allocatedQuantity = getAllocationTotal(draft.allocations);
+  const unassignedQuantity = Math.max(draft.quantity - allocatedQuantity, 0);
+  const overAssignedQuantity = Math.max(allocatedQuantity - draft.quantity, 0);
 
   function updateDraft<Key extends keyof WarehouseEntryDraft>(key: Key, value: WarehouseEntryDraft[Key]) {
-    setDraft((currentDraft) => ({ ...currentDraft, [key]: value }));
+    setDraft((currentDraft) => {
+      if (key === "locationId") {
+        const locationId = String(value);
+        const allocations =
+          currentDraft.allocations.length <= 1
+            ? currentDraft.allocations.length === 1
+              ? currentDraft.allocations.map((allocation) => ({ ...allocation, locationId }))
+              : [createAllocation(locationId, currentDraft.quantity || 1)]
+            : currentDraft.allocations;
+
+        return {
+          ...currentDraft,
+          locationId,
+          allocations
+        };
+      }
+
+      return { ...currentDraft, [key]: value };
+    });
+  }
+
+  function updateAllocation(allocationId: string, patch: Partial<WarehouseEntryAllocation>) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      allocations: currentDraft.allocations.map((allocation) =>
+        allocation.id === allocationId ? { ...allocation, ...patch } : allocation
+      )
+    }));
+  }
+
+  function addAllocation() {
+    setDraft((currentDraft) => {
+      const usedLocationIds = new Set(currentDraft.allocations.map((allocation) => allocation.locationId));
+      const nextLocationId =
+        warehouseLocations.find((location) => !usedLocationIds.has(location.id))?.id ??
+        currentDraft.locationId ??
+        defaultLocationId;
+      const pendingQuantity = Math.max(currentDraft.quantity - getAllocationTotal(currentDraft.allocations), 0);
+      const suggestedQuantity =
+        currentDraft.maxPerLocation > 0
+          ? Math.min(currentDraft.maxPerLocation, pendingQuantity || currentDraft.maxPerLocation)
+          : pendingQuantity || currentDraft.quantity || 1;
+
+      return {
+        ...currentDraft,
+        allocations: [...currentDraft.allocations, createAllocation(nextLocationId, suggestedQuantity)]
+      };
+    });
+  }
+
+  function removeAllocation(allocationId: string) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      allocations: currentDraft.allocations.filter((allocation) => allocation.id !== allocationId)
+    }));
+  }
+
+  function suggestAllocations() {
+    setDraft((currentDraft) => {
+      const totalQuantity = Number(currentDraft.quantity ?? 0);
+      const maxPerLocation = Number(currentDraft.maxPerLocation ?? 0);
+      const chunkSize = maxPerLocation > 0 ? maxPerLocation : totalQuantity;
+
+      if (totalQuantity <= 0 || chunkSize <= 0 || warehouseLocations.length === 0) {
+        return currentDraft;
+      }
+
+      const preferredLocationIds = [
+        currentDraft.locationId,
+        ...currentDraft.allocations.map((allocation) => allocation.locationId)
+      ];
+      const orderedLocations = [
+        ...preferredLocationIds
+          .map((locationId) => warehouseLocations.find((location) => location.id === locationId))
+          .filter((location): location is WarehouseLocation => Boolean(location)),
+        ...warehouseLocations
+      ].filter(
+        (location, index, locations) =>
+          locations.findIndex((currentLocation) => currentLocation.id === location.id) === index
+      );
+      let remainingQuantity = totalQuantity;
+      const allocations: WarehouseEntryAllocation[] = [];
+
+      for (const location of orderedLocations) {
+        if (remainingQuantity <= 0) {
+          break;
+        }
+
+        const quantity = maxPerLocation > 0 ? Math.min(chunkSize, remainingQuantity) : remainingQuantity;
+        allocations.push(createAllocation(location.id, Number(quantity.toFixed(2))));
+        remainingQuantity = Number((remainingQuantity - quantity).toFixed(2));
+
+        if (maxPerLocation <= 0) {
+          break;
+        }
+      }
+
+      return {
+        ...currentDraft,
+        locationId: allocations[0]?.locationId ?? currentDraft.locationId,
+        allocations
+      };
+    });
   }
 
   function updateLayoutConfig(patch: Partial<WarehouseLayoutConfig>) {
@@ -329,6 +488,11 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
       return;
     }
 
+    if (draft.maxPerLocation < 0) {
+      setFormError("El maximo por ubicacion no puede ser negativo.");
+      return;
+    }
+
     if (draft.incomingQuantity < 0) {
       setFormError("La cantidad por llegar no puede ser negativa.");
       return;
@@ -344,16 +508,55 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
       return;
     }
 
-    if (!draft.locationId) {
-      setFormError("Selecciona una ubicacion.");
+    if (draft.allocations.length === 0) {
+      setFormError("Agrega al menos una ubicacion para esta entrada.");
       return;
+    }
+
+    if (draft.allocations.some((allocation) => !allocation.locationId || Number(allocation.quantity) <= 0)) {
+      setFormError("Cada ubicacion debe tener cantidad mayor a cero.");
+      return;
+    }
+
+    const savedAllocations = draft.allocations.map((allocation) => ({
+      ...allocation,
+      quantity: Number(allocation.quantity)
+    }));
+    const allocatedTotal = getAllocationTotal(savedAllocations);
+
+    if (Math.abs(allocatedTotal - draft.quantity) > quantityTolerance) {
+      setFormError("La distribucion debe sumar exactamente la cantidad recibida.");
+      return;
+    }
+
+    if (draft.maxPerLocation > 0) {
+      const quantityByLocation = new Map<string, number>();
+
+      savedAllocations.forEach((allocation) => {
+        quantityByLocation.set(
+          allocation.locationId,
+          (quantityByLocation.get(allocation.locationId) ?? 0) + allocation.quantity
+        );
+      });
+
+      const hasLocationOverLimit = Array.from(quantityByLocation.values()).some(
+        (quantity) => quantity - draft.maxPerLocation > quantityTolerance
+      );
+
+      if (hasLocationOverLimit) {
+        setFormError("Una ubicacion excede el maximo permitido para este producto.");
+        return;
+      }
     }
 
     const savedEntry: WarehouseEntry = {
       ...draft,
       id: createId("entry"),
+      locationId: savedAllocations[0]?.locationId ?? draft.locationId,
       itemName: draft.itemName.trim(),
       sku: draft.sku.trim(),
+      maxPerLocation: Number(draft.maxPerLocation),
+      allocations: savedAllocations,
       supplier: draft.supplier.trim(),
       receivedBy: draft.receivedBy.trim(),
       notes: draft.notes.trim()
@@ -381,6 +584,20 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  }
+
+  function getEntryLocationSummary(entry: WarehouseEntry) {
+    const allocations = entry.allocations.filter((allocation) => allocation.locationId && allocation.quantity > 0);
+
+    if (allocations.length === 0) {
+      return getLocationLabel(entry.locationId, warehouseLocations);
+    }
+
+    if (allocations.length === 1) {
+      return getLocationLabel(allocations[0].locationId, warehouseLocations);
+    }
+
+    return `${getLocationLabel(allocations[0].locationId, warehouseLocations)} +${allocations.length - 1}`;
   }
 
   return (
@@ -606,6 +823,18 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
                 </label>
 
                 <label className="field">
+                  <span>Maximo por ubicacion</span>
+                  <input
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={draft.maxPerLocation}
+                    onChange={(event) => updateDraft("maxPerLocation", Number(event.target.value))}
+                    placeholder="Ej. 50"
+                  />
+                </label>
+
+                <label className="field">
                   <span>Cantidad por llegar</span>
                   <input
                     min="0"
@@ -637,7 +866,7 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
                 </label>
 
                 <label className="field">
-                  <span>Ubicacion</span>
+                  <span>Ubicacion inicial</span>
                   <select value={draft.locationId} onChange={(event) => updateDraft("locationId", event.target.value)}>
                     {warehouseLocations.map((location) => (
                       <option key={location.id} value={location.id}>
@@ -671,6 +900,90 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
                   <input value={draft.receivedBy} onChange={(event) => updateDraft("receivedBy", event.target.value)} />
                 </label>
               </div>
+
+              <section className="warehouse-allocation-panel" aria-label="Distribucion por ubicacion">
+                <div className="warehouse-allocation-toolbar">
+                  <div>
+                    <span>Distribucion por ubicacion</span>
+                    <strong>
+                      Asignado {allocatedQuantity} / {draft.quantity} {warehouseUnitLabels[draft.unit].toLowerCase()}
+                    </strong>
+                  </div>
+                  <div className="warehouse-allocation-actions">
+                    <button className="secondary-button compact-button" onClick={suggestAllocations} type="button">
+                      <MapPinned size={15} />
+                      Sugerir distribucion
+                    </button>
+                    <button className="secondary-button compact-button" onClick={addAllocation} type="button">
+                      <Plus size={15} />
+                      Agregar ubicacion
+                    </button>
+                  </div>
+                </div>
+
+                <div className="warehouse-allocation-summary">
+                  <span>
+                    {draft.maxPerLocation > 0
+                      ? `Maximo ${draft.maxPerLocation} por ubicacion`
+                      : "Sin maximo definido"}
+                  </span>
+                  <span className={unassignedQuantity > quantityTolerance ? "pending" : "ready"}>
+                    Pendiente {unassignedQuantity > quantityTolerance ? unassignedQuantity : 0}
+                  </span>
+                  {overAssignedQuantity > quantityTolerance ? (
+                    <span className="over">Excedente {overAssignedQuantity}</span>
+                  ) : null}
+                </div>
+
+                <div className="warehouse-allocation-list">
+                  {draft.allocations.map((allocation) => (
+                    <div className="warehouse-allocation-row" key={allocation.id}>
+                      <label className="field">
+                        <span>Ubicacion</span>
+                        <select
+                          value={allocation.locationId}
+                          onChange={(event) => updateAllocation(allocation.id, { locationId: event.target.value })}
+                        >
+                          {warehouseLocations.map((location) => (
+                            <option key={location.id} value={location.id}>
+                              {location.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="field">
+                        <span>Cantidad</span>
+                        <input
+                          min="0"
+                          step="0.01"
+                          type="number"
+                          value={allocation.quantity}
+                          onChange={(event) =>
+                            updateAllocation(allocation.id, { quantity: Number(event.target.value) })
+                          }
+                        />
+                      </label>
+
+                      <button
+                        className="icon-button ghost warehouse-allocation-remove"
+                        onClick={() => removeAllocation(allocation.id)}
+                        type="button"
+                        aria-label="Quitar ubicacion"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {draft.allocations.length === 0 ? (
+                  <p className="warehouse-allocation-warning">Agrega una ubicacion para registrar esta entrada.</p>
+                ) : null}
+                {unassignedQuantity > quantityTolerance ? (
+                  <p className="warehouse-allocation-warning">Queda cantidad recibida sin ubicacion.</p>
+                ) : null}
+              </section>
 
               <label className="field wide-field">
                 <span>Notas</span>
@@ -729,8 +1042,8 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
                     </strong>
                   </div>
                   <div className="warehouse-entry-stat">
-                    <span>Ubicacion</span>
-                    <strong>{getLocationLabel(entry.locationId, warehouseLocations)}</strong>
+                    <span>Ubicaciones</span>
+                    <strong>{getEntryLocationSummary(entry)}</strong>
                   </div>
                   <div className="warehouse-entry-stat">
                     <span>Fecha</span>

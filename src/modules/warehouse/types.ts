@@ -45,6 +45,12 @@ export type WarehouseLayoutConfig = {
   customRows: WarehouseLayoutRow[];
 };
 
+export type WarehouseEntryAllocation = {
+  id: string;
+  locationId: string;
+  quantity: number;
+};
+
 export type WarehouseEntry = {
   id: string;
   receivedAt: string;
@@ -56,6 +62,8 @@ export type WarehouseEntry = {
   expectedArrivalDate: string;
   unit: ProductUnit;
   locationId: string;
+  maxPerLocation: number;
+  allocations: WarehouseEntryAllocation[];
   supplier: string;
   receivedBy: string;
   status: WarehouseEntryStatus;
@@ -78,6 +86,7 @@ export type InventoryRecord = {
   blockedQuantity: number;
   damagedQuantity: number;
   incomingQuantity: number;
+  maxPerLocation: number;
   firstReceivedAt: string;
   lastReceivedAt: string;
   nextArrivalDate: string;

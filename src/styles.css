@@ -1956,6 +1956,100 @@ button {
   gap: 14px;
 }
 
+.warehouse-allocation-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe9dc;
+  border-radius: 8px;
+  background: #fbfdf8;
+  padding: 12px;
+}
+
+.warehouse-allocation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.warehouse-allocation-toolbar > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.warehouse-allocation-toolbar span,
+.warehouse-allocation-summary span {
+  color: #657461;
+  font-size: 0.72rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.warehouse-allocation-toolbar strong {
+  color: #253322;
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.warehouse-allocation-actions,
+.warehouse-allocation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.warehouse-allocation-summary span {
+  border: 1px solid #e1eadf;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 7px 9px;
+}
+
+.warehouse-allocation-summary .ready {
+  border-color: #aed2b0;
+  background: #eef8ef;
+  color: #2f7045;
+}
+
+.warehouse-allocation-summary .pending {
+  border-color: #e7ca80;
+  background: #fff8dd;
+  color: #7e5d11;
+}
+
+.warehouse-allocation-summary .over,
+.warehouse-allocation-warning {
+  border-color: #efb9ad;
+  background: #fff0ed;
+  color: #9a3826;
+}
+
+.warehouse-allocation-list {
+  display: grid;
+  gap: 9px;
+}
+
+.warehouse-allocation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 150px) 42px;
+  gap: 10px;
+  align-items: end;
+}
+
+.warehouse-allocation-remove {
+  align-self: end;
+}
+
+.warehouse-allocation-warning {
+  margin: 0;
+  border: 1px solid #efb9ad;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 0.84rem;
+  font-weight: 760;
+}
+
 .form-error {
   margin: 0;
   border-radius: 8px;
@@ -2322,6 +2416,7 @@ button {
   .clean-section-heading,
   .component-heading,
   .warehouse-command-panel,
+  .warehouse-allocation-toolbar,
   .sales-footer-actions {
     align-items: stretch;
     flex-direction: column;
@@ -2329,7 +2424,8 @@ button {
 
   .button-row,
   .credit-tools,
-  .warehouse-command-actions {
+  .warehouse-command-actions,
+  .warehouse-allocation-actions {
     align-items: stretch;
     flex-direction: column;
   }
@@ -2355,6 +2451,7 @@ button {
   .button-row > *,
   .credit-tools > *,
   .warehouse-command-actions > *,
+  .warehouse-allocation-actions > *,
   .sales-footer-actions > * {
     width: 100%;
   }
@@ -2379,6 +2476,7 @@ button {
   .product-row,
   .product-catalog-row,
   .print-design-row,
+  .warehouse-allocation-row,
   .warehouse-entry-row,
   .warehouse-layout-config-grid,
   .warehouse-stat-grid,

@@ -2,6 +2,7 @@ import type { ProductComponentType, ProductUnit } from "../sales/types";
 import type {
   InventoryRecord,
   WarehouseEntry,
+  WarehouseEntryAllocation,
   WarehouseEntryStatus,
   WarehouseLayoutConfig,
   WarehouseLayoutRow,
@@ -251,29 +252,62 @@ function nextArrivalDate(currentDate: string, candidateDate: string) {
   return currentDate;
 }
 
-function createRecord(entry: WarehouseEntry, locationLabel: string): InventoryRecord {
-  const availableQuantity = entry.status === "disponible" ? entry.quantity : 0;
+function getEntryAllocations(entry: WarehouseEntry): WarehouseEntryAllocation[] {
+  const allocations = Array.isArray(entry.allocations) ? entry.allocations : [];
+  const validAllocations = allocations
+    .map((allocation) => ({
+      id: allocation.id || createLegacyAllocationId(entry, allocation.locationId),
+      locationId: allocation.locationId || entry.locationId,
+      quantity: Number(allocation.quantity ?? 0)
+    }))
+    .filter((allocation) => allocation.locationId && allocation.quantity > 0);
+
+  if (validAllocations.length > 0) {
+    return validAllocations;
+  }
+
+  return [
+    {
+      id: createLegacyAllocationId(entry, entry.locationId),
+      locationId: entry.locationId,
+      quantity: Number(entry.quantity ?? 0)
+    }
+  ].filter((allocation) => allocation.locationId && allocation.quantity > 0);
+}
+
+function createLegacyAllocationId(entry: WarehouseEntry, locationId: string) {
+  return `${entry.id || "entry"}-${locationId || "location"}`;
+}
+
+function createRecord(
+  entry: WarehouseEntry,
+  allocation: WarehouseEntryAllocation,
+  locationLabel: string,
+  incomingQuantity: number
+): InventoryRecord {
+  const quantity = Number(allocation.quantity ?? 0);
+  const availableQuantity = entry.status === "disponible" ? quantity : 0;
   const pendingQuantity =
-    entry.status === "pendiente-revision" || entry.status === "pendiente-ubicacion" ? entry.quantity : 0;
-  const blockedQuantity = entry.status === "bloqueado" ? entry.quantity : 0;
-  const damagedQuantity = entry.status === "danado" ? entry.quantity : 0;
-  const incomingQuantity = entry.incomingQuantity ?? 0;
+    entry.status === "pendiente-revision" || entry.status === "pendiente-ubicacion" ? quantity : 0;
+  const blockedQuantity = entry.status === "bloqueado" ? quantity : 0;
+  const damagedQuantity = entry.status === "danado" ? quantity : 0;
   const expectedArrivalDate = incomingQuantity > 0 ? entry.expectedArrivalDate : "";
 
   return {
-    key: `${entry.sku || entry.itemName}-${entry.locationId}-${entry.unit}`,
+    key: `${entry.sku || entry.itemName}-${allocation.locationId}-${entry.unit}`,
     itemName: entry.itemName,
     sku: entry.sku,
     materialType: entry.materialType,
     unit: entry.unit,
-    locationId: entry.locationId,
+    locationId: allocation.locationId,
     locationLabel,
-    totalQuantity: entry.quantity,
+    totalQuantity: quantity,
     availableQuantity,
     pendingQuantity,
     blockedQuantity,
     damagedQuantity,
     incomingQuantity,
+    maxPerLocation: Number(entry.maxPerLocation ?? 0),
     firstReceivedAt: entry.receivedAt,
     lastReceivedAt: entry.receivedAt,
     nextArrivalDate: expectedArrivalDate,
@@ -307,39 +341,43 @@ export function calculateInventory(entries: WarehouseEntry[], locations: Warehou
   const records = new Map<string, InventoryRecord>();
 
   entries.forEach((entry) => {
-    const locationLabel = getLocationLabel(entry.locationId, locations);
-    const key = `${entry.sku || entry.itemName}-${entry.locationId}-${entry.unit}`;
-    const existingRecord = records.get(key);
+    getEntryAllocations(entry).forEach((allocation, allocationIndex) => {
+      const locationLabel = getLocationLabel(allocation.locationId, locations);
+      const key = `${entry.sku || entry.itemName}-${allocation.locationId}-${entry.unit}`;
+      const existingRecord = records.get(key);
+      const quantity = Number(allocation.quantity ?? 0);
+      const incomingQuantity = allocationIndex === 0 ? Number(entry.incomingQuantity ?? 0) : 0;
 
-    if (!existingRecord) {
-      records.set(key, createRecord(entry, locationLabel));
-      return;
-    }
+      if (!existingRecord) {
+        records.set(key, createRecord(entry, allocation, locationLabel, incomingQuantity));
+        return;
+      }
 
-    const nextRecord: InventoryRecord = {
-      ...existingRecord,
-      totalQuantity: existingRecord.totalQuantity + entry.quantity,
-      availableQuantity:
-        existingRecord.availableQuantity + (entry.status === "disponible" ? entry.quantity : 0),
-      pendingQuantity:
-        existingRecord.pendingQuantity +
-        (entry.status === "pendiente-revision" || entry.status === "pendiente-ubicacion" ? entry.quantity : 0),
-      blockedQuantity: existingRecord.blockedQuantity + (entry.status === "bloqueado" ? entry.quantity : 0),
-      damagedQuantity: existingRecord.damagedQuantity + (entry.status === "danado" ? entry.quantity : 0),
-      incomingQuantity: existingRecord.incomingQuantity + (entry.incomingQuantity ?? 0),
-      firstReceivedAt: olderDate(existingRecord.firstReceivedAt, entry.receivedAt),
-      lastReceivedAt: newerDate(existingRecord.lastReceivedAt, entry.receivedAt),
-      nextArrivalDate: nextArrivalDate(
-        existingRecord.nextArrivalDate,
-        (entry.incomingQuantity ?? 0) > 0 ? entry.expectedArrivalDate : ""
-      ),
-      lastMovementAt: newerDate(existingRecord.lastMovementAt, entry.receivedAt),
-      entryCount: existingRecord.entryCount + 1
-    };
+      const nextRecord: InventoryRecord = {
+        ...existingRecord,
+        totalQuantity: existingRecord.totalQuantity + quantity,
+        availableQuantity: existingRecord.availableQuantity + (entry.status === "disponible" ? quantity : 0),
+        pendingQuantity:
+          existingRecord.pendingQuantity +
+          (entry.status === "pendiente-revision" || entry.status === "pendiente-ubicacion" ? quantity : 0),
+        blockedQuantity: existingRecord.blockedQuantity + (entry.status === "bloqueado" ? quantity : 0),
+        damagedQuantity: existingRecord.damagedQuantity + (entry.status === "danado" ? quantity : 0),
+        incomingQuantity: existingRecord.incomingQuantity + incomingQuantity,
+        maxPerLocation: Math.max(existingRecord.maxPerLocation, Number(entry.maxPerLocation ?? 0)),
+        firstReceivedAt: olderDate(existingRecord.firstReceivedAt, entry.receivedAt),
+        lastReceivedAt: newerDate(existingRecord.lastReceivedAt, entry.receivedAt),
+        nextArrivalDate: nextArrivalDate(
+          existingRecord.nextArrivalDate,
+          incomingQuantity > 0 ? entry.expectedArrivalDate : ""
+        ),
+        lastMovementAt: newerDate(existingRecord.lastMovementAt, entry.receivedAt),
+        entryCount: existingRecord.entryCount + 1
+      };
 
-    records.set(key, {
-      ...nextRecord,
-      status: resolveInventoryStatus(nextRecord)
+      records.set(key, {
+        ...nextRecord,
+        status: resolveInventoryStatus(nextRecord)
+      });
     });
   });
 
@@ -378,12 +416,17 @@ export function entryMatches(entry: WarehouseEntry, query: string, locations: Wa
     return true;
   }
 
+  const allocationLabels = getEntryAllocations(entry).map((allocation) =>
+    getLocationLabel(allocation.locationId, locations)
+  );
+
   return [
     entry.itemName,
     entry.sku,
     entry.supplier,
     entry.receivedBy,
-    getLocationLabel(entry.locationId, locations)
+    getLocationLabel(entry.locationId, locations),
+    ...allocationLabels
   ].some((field) => field.toLowerCase().includes(normalizedQuery));
 }
 
@@ -408,6 +451,7 @@ export function createInventoryCsv(inventory: InventoryRecord[], locations: Ware
     "Bloqueado",
     "Danado",
     "Cantidad por llegar",
+    "Maximo por ubicacion",
     "Unidad",
     "Ubicacion",
     "Zona",
@@ -435,6 +479,7 @@ export function createInventoryCsv(inventory: InventoryRecord[], locations: Ware
       record.blockedQuantity,
       record.damagedQuantity,
       record.incomingQuantity,
+      record.maxPerLocation || "",
       warehouseUnitLabels[record.unit],
       record.locationLabel,
       location?.zone ?? "",
