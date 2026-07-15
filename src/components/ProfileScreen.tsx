@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import type { Profile } from "../data/profiles";
 import { SalesView } from "../modules/sales/components/SalesView";
 import type { Product } from "../modules/sales/types";
+import { WarehouseScreen } from "../modules/warehouse/components/WarehouseScreen";
 
 type ProfileScreenProps = {
   profile: Profile;
@@ -14,6 +15,10 @@ export function ProfileScreen({ profile, products, onBack }: ProfileScreenProps)
 
   if (profile.id === "ventas") {
     return <SalesView products={products} onBack={onBack} />;
+  }
+
+  if (profile.id === "almacen") {
+    return <WarehouseScreen products={products} onBack={onBack} />;
   }
 
   return (
