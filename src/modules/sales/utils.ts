@@ -8,6 +8,9 @@ import type {
   PaymentTerm,
   Priority,
   Product,
+  ProductComponentProcess,
+  ProductComponentStatus,
+  ProductComponentType,
   SalesOrder,
   SalesUser
 } from "./types";
@@ -57,6 +60,49 @@ export const documentTypeLabels: Record<DocumentType, string> = {
   "documento-fiscal": "Documento fiscal",
   "cotizacion-firmada": "Cotización firmada",
   otro: "Otro"
+};
+
+export const productStatusLabels: Record<Product["status"], string> = {
+  borrador: "Borrador",
+  activo: "Activo",
+  revision: "En revisión",
+  inactivo: "Inactivo"
+};
+
+export const productUnitLabels: Record<Product["unit"], string> = {
+  pieza: "Pieza",
+  metro: "Metro",
+  kg: "Kg",
+  set: "Set"
+};
+
+export const componentTypeLabels: Record<ProductComponentType, string> = {
+  "pieza-impresa-3d": "Pieza impresa 3D",
+  "pieza-fabricada": "Pieza fabricada",
+  tornilleria: "Tornillería",
+  motor: "Motor",
+  cableado: "Cableado",
+  electronico: "Electrónico",
+  empaque: "Empaque",
+  comprado: "Comprado",
+  "servicio-externo": "Servicio externo",
+  otro: "Otro"
+};
+
+export const componentProcessLabels: Record<ProductComponentProcess, string> = {
+  "impresion-3d": "Impresión 3D",
+  comprado: "Comprado",
+  fabricado: "Fabricado",
+  ensamblado: "Ensamblado",
+  cableado: "Cableado",
+  "servicio-externo": "Servicio externo",
+  pendiente: "Pendiente"
+};
+
+export const componentStatusLabels: Record<ProductComponentStatus, string> = {
+  pendiente: "Pendiente",
+  revision: "En revisión",
+  aprobado: "Aprobado"
 };
 
 export function createId(prefix: string) {
@@ -124,9 +170,20 @@ export function productMatches(product: Product, query: string) {
     return true;
   }
 
-  return [product.name, product.sku, product.category, product.shortDescription].some((field) =>
-    field.toLowerCase().includes(normalizedQuery)
-  );
+  const searchableFields = [
+    product.name,
+    product.sku,
+    product.category,
+    product.shortDescription,
+    ...product.components.flatMap((component) => [
+      component.name,
+      component.material,
+      component.supplierCompany,
+      component.supplierPartNumber
+    ])
+  ];
+
+  return searchableFields.some((field) => field.toLowerCase().includes(normalizedQuery));
 }
 
 export function lineSubtotal(line: OrderLine) {

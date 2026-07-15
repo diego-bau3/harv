@@ -300,7 +300,9 @@ button {
 .status-pendiente-producto,
 .status-pendiente-pago,
 .status-pendiente-credito,
-.status-pill.incompleto {
+.status-pill.incompleto,
+.status-pill.borrador,
+.status-pill.revision {
   border-color: #f0d099;
   background: #fff5dd;
   color: #855b12;
@@ -395,6 +397,7 @@ button {
 }
 
 .client-clean-list,
+.product-catalog-list,
 .generated-orders-list {
   display: grid;
   gap: 10px;
@@ -610,6 +613,168 @@ button {
   display: grid;
   min-width: 0;
   gap: 4px;
+}
+
+.product-catalog-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.6fr) 110px 130px auto minmax(160px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #eee2d8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 13px;
+}
+
+.product-catalog-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.product-catalog-main div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.product-catalog-main strong {
+  overflow-wrap: anywhere;
+  color: #2d231e;
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.product-catalog-main p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #7a665c;
+  font-size: 0.84rem;
+  font-weight: 640;
+}
+
+.product-catalog-stat {
+  display: grid;
+  gap: 4px;
+}
+
+.product-catalog-stat span {
+  color: #7a665c;
+  font-size: 0.72rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.product-catalog-stat strong {
+  color: #2d231e;
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.product-component-preview,
+.component-file-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.product-component-preview span,
+.component-file-list span {
+  border: 1px solid #eee2d8;
+  border-radius: 999px;
+  background: #fffaf6;
+  color: #6f5b50;
+  padding: 6px 9px;
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.product-editor-modal {
+  width: min(1120px, 100%);
+}
+
+.product-editor-section {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #eee2d8;
+  border-radius: 8px;
+  background: #fffdfb;
+  padding: 14px;
+}
+
+.product-editor-section h3,
+.supplier-block h4 {
+  margin: 0;
+  color: #2d231e;
+  letter-spacing: 0;
+}
+
+.product-editor-section h3 {
+  font-size: 1rem;
+}
+
+.supplier-block h4 {
+  font-size: 0.9rem;
+}
+
+.four-columns {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.component-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.component-heading p {
+  margin: 4px 0 0;
+  color: #7a665c;
+  font-size: 0.88rem;
+  font-weight: 640;
+}
+
+.component-editor-list {
+  display: grid;
+  gap: 12px;
+}
+
+.component-editor-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #eadbd0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.component-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.component-card-header strong {
+  color: #8f4a31;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+}
+
+.supplier-block {
+  display: grid;
+  gap: 12px;
+  border-radius: 8px;
+  background: #fff8f1;
+  padding: 12px;
+}
+
+.file-button {
+  cursor: pointer;
 }
 
 .section-heading {
@@ -1351,6 +1516,8 @@ button {
   }
 
   .section-heading,
+  .clean-section-heading,
+  .component-heading,
   .sales-footer-actions {
     align-items: stretch;
     flex-direction: column;
@@ -1370,11 +1537,41 @@ button {
 
   .two-columns,
   .three-columns,
+  .four-columns,
   .commerce-grid,
+  .order-builder-grid,
+  .order-meta-strip,
   .totals-strip,
   .product-filters,
-  .product-row {
+  .product-row,
+  .product-catalog-row,
+  .generated-order-row {
     grid-template-columns: 1fr;
+  }
+
+  .client-clean-row {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .client-clean-row .status-pill,
+  .client-clean-row .client-actions,
+  .product-catalog-row .status-pill,
+  .product-catalog-row .client-actions,
+  .product-component-preview {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .product-catalog-main {
+    grid-template-columns: 1fr;
+  }
+
+  .product-catalog-stat {
+    grid-column: 2;
+  }
+
+  .order-total-card {
+    position: static;
   }
 
   .order-meta-grid {

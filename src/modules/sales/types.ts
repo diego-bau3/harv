@@ -4,9 +4,32 @@ export type PaymentTerm = "contado" | "credito" | "anticipo" | "pendiente";
 
 export type PaymentMethod = "transferencia" | "tarjeta" | "efectivo" | "credito" | "por-definir";
 
-export type ProductStatus = "activo" | "inactivo";
+export type ProductStatus = "borrador" | "activo" | "revision" | "inactivo";
 
-export type ProductUnit = "pieza" | "metro" | "kg";
+export type ProductUnit = "pieza" | "metro" | "kg" | "set";
+
+export type ProductComponentType =
+  | "pieza-impresa-3d"
+  | "pieza-fabricada"
+  | "tornilleria"
+  | "motor"
+  | "cableado"
+  | "electronico"
+  | "empaque"
+  | "comprado"
+  | "servicio-externo"
+  | "otro";
+
+export type ProductComponentProcess =
+  | "impresion-3d"
+  | "comprado"
+  | "fabricado"
+  | "ensamblado"
+  | "cableado"
+  | "servicio-externo"
+  | "pendiente";
+
+export type ProductComponentStatus = "pendiente" | "revision" | "aprobado";
 
 export type Priority = "normal" | "alta" | "urgente" | "critica";
 
@@ -58,6 +81,36 @@ export type Product = {
   basePrice: number;
   unit: ProductUnit;
   status: ProductStatus;
+  revision: string;
+  estimatedProductionTime: string;
+  commercialNotes: string;
+  technicalNotes: string;
+  components: ProductComponent[];
+};
+
+export type ProductComponent = {
+  id: string;
+  name: string;
+  type: ProductComponentType;
+  quantity: number;
+  unit: ProductUnit;
+  process: ProductComponentProcess;
+  status: ProductComponentStatus;
+  dimensions: string;
+  material: string;
+  color: string;
+  finish: string;
+  supplierCompany: string;
+  supplierContact: string;
+  supplierEmail: string;
+  supplierPhone: string;
+  supplierPartNumber: string;
+  unitCost: number;
+  leadTime: string;
+  minimumPurchaseQuantity: string;
+  referenceLink: string;
+  technicalFiles: string[];
+  notes: string;
 };
 
 export type OrderLine = {

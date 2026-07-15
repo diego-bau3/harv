@@ -1,7 +1,7 @@
 import { Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Product, ProductStatus } from "../types";
-import { formatCurrency, productMatches } from "../utils";
+import { formatCurrency, productMatches, productStatusLabels } from "../utils";
 
 type ProductModalProps = {
   products: Product[];
@@ -30,7 +30,7 @@ export function ProductModal({ products, onClose, onSelect }: ProductModalProps)
     <div className="modal-backdrop" role="presentation">
       <section className="modal-shell product-modal" role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
         <header className="modal-header">
-          <h2 id="product-modal-title">Agregar producto</h2>
+          <h2 id="product-modal-title">Seleccionar producto</h2>
           <button className="icon-button ghost" onClick={onClose} type="button" aria-label="Cerrar modal">
             <X size={20} />
           </button>
@@ -61,6 +61,8 @@ export function ProductModal({ products, onClose, onSelect }: ProductModalProps)
             <span>Estado</span>
             <select value={status} onChange={(event) => setStatus(event.target.value as ProductStatus | "todos")}>
               <option value="activo">Activo</option>
+              <option value="borrador">Borrador</option>
+              <option value="revision">En revisión</option>
               <option value="inactivo">Inactivo</option>
               <option value="todos">Todos</option>
             </select>
@@ -78,7 +80,7 @@ export function ProductModal({ products, onClose, onSelect }: ProductModalProps)
               <div className="product-meta">
                 <span>{product.category}</span>
                 <span>{formatCurrency(product.basePrice)}</span>
-                <span className={`status-pill ${product.status}`}>{product.status === "activo" ? "Activo" : "Inactivo"}</span>
+                <span className={`status-pill ${product.status}`}>{productStatusLabels[product.status]}</span>
               </div>
               <button
                 className="secondary-button"
