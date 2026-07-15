@@ -181,15 +181,7 @@ export function createInitialOrder(user: SalesUser): SalesOrder {
     creditReviewedBy: null,
     creditReviewedAt: null,
     documents: [],
-    history: [
-      {
-        id: createId("history"),
-        user: user.name,
-        at: createdAt,
-        action: "Creación de orden",
-        detail: `Se creó la orden ${folio} como borrador.`
-      }
-    ]
+    history: []
   };
 }
 

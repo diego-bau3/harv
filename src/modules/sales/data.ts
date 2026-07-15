@@ -1,7 +1,7 @@
 import type { Client, Product, SalesUser } from "./types";
 
 export const salesUser: SalesUser = {
-  name: "Usuario de Ventas",
+  name: "",
   permissions: {
     verifyPayment: true,
     approveCredit: true,

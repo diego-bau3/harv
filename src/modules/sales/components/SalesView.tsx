@@ -63,7 +63,7 @@ type ClientDraft = Omit<Client, "id" | "status">;
 function createHistory(action: string, detail: string): HistoryEvent {
   return {
     id: createId("history"),
-    user: salesUser.name,
+    user: salesUser.name || "Ventas",
     at: new Date().toISOString(),
     action,
     detail
@@ -291,10 +291,10 @@ export function SalesView({ onBack }: SalesViewProps) {
         commercialStatus: "pago-verificado",
         status: order.status === "pendiente-pago" ? "borrador" : order.status,
         paymentVerifiedAt: new Date().toISOString(),
-        paymentVerifiedBy: salesUser.name
+        paymentVerifiedBy: salesUser.name || "Ventas"
       },
       "Pago verificado",
-      `Verificado por ${salesUser.name}.`
+      `Verificado por ${salesUser.name || "Ventas"}.`
     );
   }
 
@@ -314,13 +314,13 @@ export function SalesView({ onBack }: SalesViewProps) {
         orderStatus: order.status === "pendiente-credito" ? ("borrador" as const) : order.status,
         commercialStatus: "credito-aprobado" as const,
         action: "Crédito aprobado",
-        detail: `Aprobado por ${salesUser.name}.`
+        detail: `Aprobado por ${salesUser.name || "Ventas"}.`
       },
       rechazado: {
         orderStatus: "pendiente-credito" as const,
         commercialStatus: "credito-rechazado" as const,
         action: "Crédito rechazado",
-        detail: `Rechazado por ${salesUser.name}.`
+        detail: `Rechazado por ${salesUser.name || "Ventas"}.`
       }
     }[status];
 
@@ -329,7 +329,7 @@ export function SalesView({ onBack }: SalesViewProps) {
         status: statusMap.orderStatus,
         commercialStatus: statusMap.commercialStatus,
         creditReviewedAt: status === "pendiente" ? null : new Date().toISOString(),
-        creditReviewedBy: status === "pendiente" ? null : salesUser.name
+        creditReviewedBy: status === "pendiente" ? null : salesUser.name || "Ventas"
       },
       statusMap.action,
       statusMap.detail
@@ -527,7 +527,7 @@ export function SalesView({ onBack }: SalesViewProps) {
               </div>
               <div>
                 <span>Vendedor responsable</span>
-                <strong>{order.seller}</strong>
+                <strong>{order.seller || "Sin asignar"}</strong>
               </div>
               <div>
                 <span>Fecha de creación</span>
