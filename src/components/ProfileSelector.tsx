@@ -11,6 +11,7 @@ const productProfile: Profile = {
   id: "productos",
   name: "Productos",
   note: "Catálogo técnico",
+  status: "terminado",
   icon: PackageSearch,
   accent: "#8f4a31",
   tint: "#fff0e5"
