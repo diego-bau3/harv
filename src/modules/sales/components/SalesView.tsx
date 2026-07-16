@@ -14,7 +14,7 @@ import {
   Trash2,
   UserRound
 } from "lucide-react";
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { initialClients, salesUser } from "../data";
 import type {
   Client,
@@ -49,7 +49,10 @@ import {
   paymentMethodLabels,
   paymentTermLabels,
   priorityLabels,
-  quoteStatusLabels
+  quoteStatusLabels,
+  salesClientsStorageKey,
+  salesGeneratedOrdersStorageKey,
+  salesSentQuotesStorageKey
 } from "../utils";
 import { ClientModal } from "./ClientModal";
 import { ProductModal } from "./ProductModal";
@@ -98,11 +101,37 @@ function generatedOrderStatus(order: SalesOrder) {
   return "aprobada-comercialmente" as const;
 }
 
+function loadStoredList<Item>(key: string, fallback: Item[]): Item[] {
+  try {
+    const storedValue = window.localStorage.getItem(key);
+
+    if (!storedValue) {
+      return fallback;
+    }
+
+    const parsedValue = JSON.parse(storedValue);
+
+    return Array.isArray(parsedValue) ? parsedValue : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveStoredList<Item>(key: string, value: Item[]) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    return;
+  }
+}
+
 export function SalesView({ onBack, products }: SalesViewProps) {
-  const [clients, setClients] = useState<Client[]>(() => initialClients);
+  const [clients, setClients] = useState<Client[]>(() => loadStoredList(salesClientsStorageKey, initialClients));
   const [order, setOrder] = useState<SalesOrder>(() => createInitialOrder(salesUser));
-  const [sentQuotes, setSentQuotes] = useState<SalesQuote[]>([]);
-  const [generatedOrders, setGeneratedOrders] = useState<SalesOrder[]>([]);
+  const [sentQuotes, setSentQuotes] = useState<SalesQuote[]>(() => loadStoredList(salesSentQuotesStorageKey, []));
+  const [generatedOrders, setGeneratedOrders] = useState<SalesOrder[]>(() =>
+    loadStoredList(salesGeneratedOrdersStorageKey, [])
+  );
   const [clientQuery, setClientQuery] = useState("");
   const [clientModal, setClientModal] = useState<{ client?: Client } | null>(null);
   const [isProductModalOpen, setProductModalOpen] = useState(false);
@@ -124,6 +153,18 @@ export function SalesView({ onBack, products }: SalesViewProps) {
   const orderDraftEvaluation = useMemo(() => evaluateOrderDraft(order, selectedClient), [order, selectedClient]);
   const quoteMissingItems = quoteEvaluation.checklist.filter((item) => !item.passed);
   const orderMissingItems = orderDraftEvaluation.checklist.filter((item) => !item.passed);
+
+  useEffect(() => {
+    saveStoredList(salesClientsStorageKey, clients);
+  }, [clients]);
+
+  useEffect(() => {
+    saveStoredList(salesSentQuotesStorageKey, sentQuotes);
+  }, [sentQuotes]);
+
+  useEffect(() => {
+    saveStoredList(salesGeneratedOrdersStorageKey, generatedOrders);
+  }, [generatedOrders]);
 
   function updateOrder(patch: Partial<SalesOrder>, action?: string, detail?: string) {
     setOrder((currentOrder) => {

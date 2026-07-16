@@ -1,8 +1,10 @@
 import { ArrowLeft } from "lucide-react";
 import type { Profile } from "../data/profiles";
+import { AssemblyScreen } from "../modules/assembly/components/AssemblyScreen";
 import { FabricationScreen } from "../modules/fabrication/components/FabricationScreen";
 import { PreproductionScreen } from "../modules/preproduction/components/PreproductionScreen";
 import type { PreproductionRoute } from "../modules/preproduction/types";
+import { ProductionScreen } from "../modules/production/components/ProductionScreen";
 import { PurchasesView } from "../modules/purchases/components/PurchasesView";
 import type {
   PendingReceipt,
@@ -115,6 +117,14 @@ export function ProfileScreen({
         onRoutesChange={onPreproductionRoutesChange}
       />
     );
+  }
+
+  if (profile.id === "produccion") {
+    return <ProductionScreen products={products} onBack={onBack} />;
+  }
+
+  if (profile.id === "ensamble") {
+    return <AssemblyScreen products={products} onBack={onBack} />;
   }
 
   return (

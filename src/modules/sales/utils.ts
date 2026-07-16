@@ -19,6 +19,10 @@ import type {
   ShippingDeliveryMethod
 } from "./types";
 
+export const salesClientsStorageKey = "harv:sales-clients:v1";
+export const salesGeneratedOrdersStorageKey = "harv:sales-generated-orders:v1";
+export const salesSentQuotesStorageKey = "harv:sales-sent-quotes:v1";
+
 export const clientStatusLabels: Record<ClientStatus, string> = {
   activo: "Activo",
   incompleto: "Incompleto",

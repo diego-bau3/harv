@@ -90,7 +90,7 @@ export const profiles: Profile[] = [
   {
     id: "produccion",
     name: "Producción",
-    status: "sin-iniciar",
+    status: "en-proceso",
     icon: LineChart,
     accent: "#a4472d",
     tint: "#ffeee8"
@@ -114,7 +114,7 @@ export const profiles: Profile[] = [
   {
     id: "ensamble",
     name: "Ensamble",
-    status: "sin-iniciar",
+    status: "en-proceso",
     icon: PackageSearch,
     accent: "#9c6a36",
     tint: "#fff3e2"
