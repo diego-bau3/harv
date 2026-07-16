@@ -1,6 +1,7 @@
 import type { Priority } from "../sales/types";
 import type {
   FabricationConnectionType,
+  FabricationDispatchMode,
   FabricationJob,
   FabricationJobStatus,
   FabricationMachine,
@@ -36,11 +37,18 @@ export const fabricationMachineStatusLabels: Record<FabricationMachineStatus, st
 
 export const fabricationJobStatusLabels: Record<FabricationJobStatus, string> = {
   pendiente: "Pendiente",
+  listo: "Listo",
   asignado: "Asignado",
+  enviado: "Enviado",
   imprimiendo: "Imprimiendo",
   terminado: "Terminado",
   bloqueado: "Bloqueado",
   cancelado: "Cancelado"
+};
+
+export const fabricationDispatchModeLabels: Record<FabricationDispatchMode, string> = {
+  manual: "Confirmar envio",
+  auto: "Auto cuando se libere"
 };
 
 export const fabricationPriorityLabels: Record<Priority, string> = {
@@ -86,13 +94,32 @@ export function isManualMachine(machine: Pick<FabricationMachine, "connectionTyp
   return machine.connectionType === "manual";
 }
 
-export function getConnectionSignal(machine: Pick<FabricationMachine, "connectionType" | "status" | "agentMachineId">) {
+export function getConnectionSignal(
+  machine: Pick<FabricationMachine, "connectionType" | "status" | "agentMachineId"> &
+    Partial<Pick<FabricationMachine, "agentConnectionState">>
+) {
   if (machine.connectionType === "manual") {
     return "Manual";
   }
 
   if (machine.connectionType === "mock-agent") {
     return "Con agente";
+  }
+
+  if (machine.agentConnectionState === "connected") {
+    return "MQTT conectado";
+  }
+
+  if (machine.agentConnectionState === "connecting") {
+    return "Conectando";
+  }
+
+  if (machine.agentConnectionState === "setup-required") {
+    return "Falta vinculo";
+  }
+
+  if (machine.agentConnectionState === "error") {
+    return "Error agente";
   }
 
   if (!machine.agentMachineId) {
@@ -138,7 +165,7 @@ export function calculateFabricationStats(machines: FabricationMachine[], jobs: 
     machines: machines.length,
     available: machines.filter((machine) => machine.status === "disponible").length,
     printing: machines.filter((machine) => machine.status === "imprimiendo").length,
-    pendingJobs: jobs.filter((job) => job.status === "pendiente" || job.status === "asignado").length
+    pendingJobs: jobs.filter((job) => job.status === "pendiente" || job.status === "listo" || job.status === "asignado").length
   };
 }
 
@@ -157,7 +184,9 @@ export function machineMatches(machine: FabricationMachine, query: string) {
     machine.loadedMaterial,
     machine.supportedMaterials,
     machine.ipAddress,
-    machine.agentMachineId
+    machine.agentMachineId,
+    machine.serialNumber,
+    machine.agentMessage
   ].some((field) => field.toLowerCase().includes(normalizedQuery));
 }
 
@@ -171,6 +200,7 @@ export function jobMatches(job: FabricationJob, query: string, machines: Fabrica
   return [
     job.partName,
     job.productName,
+    job.orderReference,
     job.material,
     job.fileName,
     job.notes,
