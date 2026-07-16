@@ -2346,6 +2346,342 @@ button {
   grid-column: 1 / -1;
 }
 
+.fabrication-profile-screen {
+  background: #fbfdfb;
+  color: #243126;
+}
+
+.fabrication-screen-icon {
+  background: #e8f4ef;
+  color: #285f56;
+}
+
+.fabrication-body {
+  display: grid;
+  gap: 18px;
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  padding: 22px clamp(14px, 2.8vw, 32px) 34px;
+}
+
+.fabrication-body .main-panel {
+  border: 1px solid #dfe9dc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(49, 82, 55, 0.06);
+  padding: 18px;
+}
+
+.fabrication-command-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #dfe9dc;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.fabrication-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.fabrication-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fabrication-stat-grid article {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  border: 1px solid #dfe9dc;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 13px;
+}
+
+.fabrication-stat-grid svg {
+  grid-row: span 2;
+  color: #285f56;
+}
+
+.fabrication-stat-grid span {
+  color: #627366;
+  font-size: 0.74rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.fabrication-stat-grid strong {
+  color: #243126;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.fabrication-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.05fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.fabrication-machine-form,
+.fabrication-job-form,
+.fabrication-machine-panel,
+.fabrication-queue-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.fabrication-machine-list,
+.fabrication-job-list {
+  display: grid;
+  gap: 10px;
+}
+
+.fabrication-machine-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe9dc;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 13px;
+}
+
+.fabrication-machine-card-header,
+.fabrication-machine-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fabrication-machine-card-header {
+  justify-content: space-between;
+}
+
+.fabrication-machine-title svg {
+  flex: 0 0 auto;
+  color: #285f56;
+}
+
+.fabrication-machine-title div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.fabrication-machine-title strong,
+.fabrication-job-main strong,
+.fabrication-job-stat strong {
+  overflow-wrap: anywhere;
+  color: #243126;
+  line-height: 1.2;
+}
+
+.fabrication-machine-title span,
+.fabrication-job-main span,
+.fabrication-job-stat span {
+  overflow-wrap: anywhere;
+  color: #667568;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fabrication-progress {
+  --progress: 0%;
+  position: relative;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf3eb;
+}
+
+.fabrication-progress span {
+  display: block;
+  width: var(--progress);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f7b68, #8da64d);
+}
+
+.fabrication-machine-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.fabrication-machine-meta div {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #e3ece1;
+  border-radius: 8px;
+  background: #fbfdf8;
+  padding: 9px;
+}
+
+.fabrication-machine-meta dt,
+.fabrication-machine-meta dd {
+  margin: 0;
+}
+
+.fabrication-machine-meta dt {
+  color: #657461;
+  font-size: 0.7rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.fabrication-machine-meta dd {
+  overflow-wrap: anywhere;
+  color: #253322;
+  font-size: 0.82rem;
+  font-weight: 720;
+}
+
+.fabrication-current-job {
+  margin: 0;
+  border-left: 3px solid #2f7b68;
+  color: #40513e;
+  font-size: 0.88rem;
+  font-weight: 720;
+  padding-left: 10px;
+}
+
+.fabrication-card-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 10px;
+  align-items: end;
+}
+
+.fabrication-telemetry-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fabrication-telemetry-strip div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #d8e7d6;
+  border-radius: 8px;
+  background: #f3faf4;
+  padding: 10px;
+}
+
+.fabrication-telemetry-strip span {
+  color: #657461;
+  font-size: 0.7rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.fabrication-telemetry-strip strong {
+  color: #243126;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.fabrication-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #d8e7d6;
+  border-radius: 8px;
+  background: #f3faf4;
+  color: #285f56;
+  padding: 10px;
+}
+
+.fabrication-suggestion span {
+  margin-right: auto;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.fabrication-job-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.2fr) minmax(90px, 0.55fr) minmax(90px, 0.55fr) minmax(120px, 0.8fr) auto minmax(150px, auto);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #dfe9dc;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 13px;
+}
+
+.fabrication-job-main,
+.fabrication-job-stat {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.fabrication-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.fabrication-job-actions select {
+  min-height: 36px;
+  border: 1px solid #d9e3d7;
+  border-radius: 8px;
+  background: #fffefd;
+  color: #253322;
+  font: inherit;
+  font-size: 0.84rem;
+  padding: 0 9px;
+}
+
+.status-pill.disponible,
+.status-pill.terminado {
+  border-color: #aed2b0;
+  background: #eef8ef;
+  color: #2f7045;
+}
+
+.status-pill.imprimiendo {
+  border-color: #a8d5cf;
+  background: #eaf7f4;
+  color: #285f56;
+}
+
+.status-pill.pausada,
+.status-pill.pendiente,
+.status-pill.asignado {
+  border-color: #e7ca80;
+  background: #fff8dd;
+  color: #7e5d11;
+}
+
+.status-pill.error,
+.status-pill.bloqueado,
+.status-pill.cancelado {
+  border-color: #efb9ad;
+  background: #fff0ed;
+  color: #9a3826;
+}
+
+.status-pill.mantenimiento,
+.status-pill.offline {
+  border-color: #d8ded5;
+  background: #f7f8f5;
+  color: #697366;
+}
+
 @media (max-width: 640px) {
   .profile-selector {
     padding: 28px 14px;
@@ -2381,11 +2717,13 @@ button {
   }
 
   .warehouse-layout,
+  .fabrication-layout,
   .warehouse-map-layout {
     grid-template-columns: 1fr;
   }
 
-  .warehouse-stat-grid {
+  .warehouse-stat-grid,
+  .fabrication-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2417,6 +2755,7 @@ button {
   .component-heading,
   .warehouse-command-panel,
   .warehouse-allocation-toolbar,
+  .fabrication-command-panel,
   .sales-footer-actions {
     align-items: stretch;
     flex-direction: column;
@@ -2425,7 +2764,8 @@ button {
   .button-row,
   .credit-tools,
   .warehouse-command-actions,
-  .warehouse-allocation-actions {
+  .warehouse-allocation-actions,
+  .fabrication-command-actions {
     align-items: stretch;
     flex-direction: column;
   }
@@ -2452,6 +2792,7 @@ button {
   .credit-tools > *,
   .warehouse-command-actions > *,
   .warehouse-allocation-actions > *,
+  .fabrication-command-actions > *,
   .sales-footer-actions > * {
     width: 100%;
   }
@@ -2478,8 +2819,13 @@ button {
   .print-design-row,
   .warehouse-allocation-row,
   .warehouse-entry-row,
+  .fabrication-card-controls,
+  .fabrication-telemetry-strip,
+  .fabrication-job-row,
+  .fabrication-machine-meta,
   .warehouse-layout-config-grid,
   .warehouse-stat-grid,
+  .fabrication-stat-grid,
   .generated-order-row {
     grid-template-columns: 1fr;
   }
@@ -2507,6 +2853,20 @@ button {
 
   .warehouse-entry-row .status-pill {
     justify-self: start;
+  }
+
+  .fabrication-job-row .status-pill,
+  .fabrication-job-actions {
+    justify-self: start;
+  }
+
+  .fabrication-job-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .fabrication-job-actions > * {
+    width: 100%;
   }
 
   .warehouse-custom-row {
