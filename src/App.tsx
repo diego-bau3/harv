@@ -3,7 +3,13 @@ import { ProfileSelector } from "./components/ProfileSelector";
 import { ProfileScreen } from "./components/ProfileScreen";
 import type { Profile } from "./data/profiles";
 import { ProductCatalogScreen } from "./modules/products/components/ProductCatalogScreen";
+import {
+  loadStoredPreproductionRoutes,
+  saveStoredPreproductionRoutes
+} from "./modules/preproduction/storage";
+import type { PreproductionRoute } from "./modules/preproduction/types";
 import { initialPurchaseRequests, initialSuppliers } from "./modules/purchases/data";
+import { createPreproductionPurchaseRequests } from "./modules/purchases/preproductionRequests";
 import { createProductSupplierRequests } from "./modules/purchases/productRequests";
 import type {
   PendingReceipt,
@@ -20,6 +26,7 @@ import { futureDate, purchaseId, purchaseReceiptIssueLabels } from "./modules/pu
 import { productCatalog } from "./modules/sales/data";
 import type { Product } from "./modules/sales/types";
 import { createId } from "./modules/sales/utils";
+import { plantSupplies } from "./modules/supplies/data";
 
 type ProductDraft = Omit<Product, "id">;
 
@@ -48,12 +55,24 @@ function findMatchingSupplier(suppliers: PurchaseSupplier[], supplier: PurchaseS
 export default function App() {
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [isProductCatalogOpen, setProductCatalogOpen] = useState(false);
+  const [shouldOpenNewProduct, setShouldOpenNewProduct] = useState(false);
   const [products, setProducts] = useState<Product[]>(() => productCatalog);
   const [suppliers, setSuppliers] = useState<PurchaseSupplier[]>(() => initialSuppliers);
-  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>(() => [
-    ...createProductSupplierRequests(productCatalog, initialPurchaseRequests),
-    ...initialPurchaseRequests
-  ]);
+  const [preproductionRoutes, setPreproductionRoutes] = useState<PreproductionRoute[]>(() =>
+    loadStoredPreproductionRoutes(productCatalog)
+  );
+  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>(() => {
+    const productRequests = createProductSupplierRequests(productCatalog, initialPurchaseRequests);
+    const baseRequests = [...productRequests, ...initialPurchaseRequests];
+    const preproductionRequests = createPreproductionPurchaseRequests(
+      productCatalog,
+      preproductionRoutes,
+      plantSupplies,
+      baseRequests
+    );
+
+    return [...preproductionRequests, ...baseRequests];
+  });
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [pendingReceipts, setPendingReceipts] = useState<PendingReceipt[]>([]);
   const [purchaseMessages, setPurchaseMessages] = useState<PurchaseMessage[]>([]);
@@ -61,10 +80,22 @@ export default function App() {
   useEffect(() => {
     setPurchaseRequests((currentRequests) => {
       const newRequests = createProductSupplierRequests(products, currentRequests);
+      const requestsWithProducts = [...newRequests, ...currentRequests];
+      const newPreproductionRequests = createPreproductionPurchaseRequests(
+        products,
+        preproductionRoutes,
+        plantSupplies,
+        requestsWithProducts
+      );
+      const allNewRequests = [...newPreproductionRequests, ...newRequests];
 
-      return newRequests.length > 0 ? [...newRequests, ...currentRequests] : currentRequests;
+      return allNewRequests.length > 0 ? [...allNewRequests, ...currentRequests] : currentRequests;
     });
-  }, [products]);
+  }, [products, preproductionRoutes]);
+
+  useEffect(() => {
+    saveStoredPreproductionRoutes(preproductionRoutes);
+  }, [preproductionRoutes]);
 
   function saveProduct(draft: ProductDraft, existingProduct?: Product) {
     const savedProduct: Product = {
@@ -79,6 +110,17 @@ export default function App() {
 
       return [savedProduct, ...currentProducts];
     });
+  }
+
+  function openProductCatalog() {
+    setProductCatalogOpen(true);
+    setShouldOpenNewProduct(false);
+  }
+
+  function openNewProductFromProfile() {
+    setSelectedProfile(null);
+    setProductCatalogOpen(true);
+    setShouldOpenNewProduct(true);
   }
 
   function assignSupplierToProductComponent(productId: string, componentId: string, supplier: PurchaseSupplier) {
@@ -401,6 +443,7 @@ export default function App() {
     return (
       <ProfileScreen
         pendingReceipts={pendingReceipts}
+        preproductionRoutes={preproductionRoutes}
         products={products}
         profile={selectedProfile}
         purchaseMessages={purchaseMessages}
@@ -410,6 +453,8 @@ export default function App() {
         onAddPurchaseMessage={addPurchaseMessage}
         onAddSupplier={addSupplier}
         onBack={() => setSelectedProfile(null)}
+        onOpenProducts={openNewProductFromProfile}
+        onPreproductionRoutesChange={setPreproductionRoutes}
         onAddPurchaseOrderDocument={addPurchaseOrderDocument}
         onCreatePurchaseOrder={createPurchaseOrder}
         onReceivePurchaseReceipt={receivePurchaseReceipt}
@@ -421,12 +466,17 @@ export default function App() {
   if (isProductCatalogOpen) {
     return (
       <ProductCatalogScreen
+        openNewProduct={shouldOpenNewProduct}
         products={products}
-        onBack={() => setProductCatalogOpen(false)}
+        onBack={() => {
+          setProductCatalogOpen(false);
+          setShouldOpenNewProduct(false);
+        }}
+        onNewProductOpened={() => setShouldOpenNewProduct(false)}
         onSaveProduct={saveProduct}
       />
     );
   }
 
-  return <ProfileSelector onOpenProducts={() => setProductCatalogOpen(true)} onSelect={setSelectedProfile} />;
+  return <ProfileSelector onOpenProducts={openProductCatalog} onSelect={setSelectedProfile} />;
 }

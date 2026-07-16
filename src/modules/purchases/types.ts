@@ -10,7 +10,7 @@ export type PurchaseRequestType = "urgente" | "siguiente" | "problema";
 
 export type PurchaseRequestStatus = "pendiente" | "cotizando" | "comprado" | "bloqueado";
 
-export type PurchaseRequestSource = "manual" | "producto" | "almacen" | "work-order";
+export type PurchaseRequestSource = "manual" | "producto" | "preproduccion" | "almacen" | "work-order";
 
 export type PurchaseOrderStatus =
   | "borrador"

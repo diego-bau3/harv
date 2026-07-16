@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import type { Profile } from "../data/profiles";
 import { FabricationScreen } from "../modules/fabrication/components/FabricationScreen";
 import { PreproductionScreen } from "../modules/preproduction/components/PreproductionScreen";
+import type { PreproductionRoute } from "../modules/preproduction/types";
 import { PurchasesView } from "../modules/purchases/components/PurchasesView";
 import type {
   PendingReceipt,
@@ -21,12 +22,15 @@ import { WarehouseScreen } from "../modules/warehouse/components/WarehouseScreen
 type ProfileScreenProps = {
   profile: Profile;
   products: Product[];
+  preproductionRoutes: PreproductionRoute[];
   suppliers: PurchaseSupplier[];
   purchaseRequests: PurchaseRequest[];
   purchaseOrders: PurchaseOrder[];
   pendingReceipts: PendingReceipt[];
   purchaseMessages: PurchaseMessage[];
   onBack: () => void;
+  onOpenProducts: () => void;
+  onPreproductionRoutesChange: (routes: PreproductionRoute[]) => void;
   onAddSupplier: (supplier: PurchaseSupplier) => void;
   onResolveRequestSupplier: (requestId: string, supplier: PurchaseSupplier) => void;
   onCreatePurchaseOrder: (purchaseOrder: PurchaseOrder, pendingReceipt: PendingReceipt) => void;
@@ -43,6 +47,7 @@ type ProfileScreenProps = {
 
 export function ProfileScreen({
   pendingReceipts,
+  preproductionRoutes,
   products,
   profile,
   purchaseMessages,
@@ -53,6 +58,8 @@ export function ProfileScreen({
   onAddPurchaseOrderDocument,
   onAddSupplier,
   onBack,
+  onOpenProducts,
+  onPreproductionRoutesChange,
   onCreatePurchaseOrder,
   onReceivePurchaseReceipt,
   onResolveRequestSupplier
@@ -99,7 +106,15 @@ export function ProfileScreen({
   }
 
   if (profile.id === "pre-produccion") {
-    return <PreproductionScreen products={products} onBack={onBack} />;
+    return (
+      <PreproductionScreen
+        products={products}
+        routes={preproductionRoutes}
+        onBack={onBack}
+        onOpenProducts={onOpenProducts}
+        onRoutesChange={onPreproductionRoutesChange}
+      />
+    );
   }
 
   return (

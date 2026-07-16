@@ -6,7 +6,7 @@ export type PaymentMethod = "transferencia" | "tarjeta" | "efectivo" | "credito"
 
 export type ProductStatus = "borrador" | "activo" | "inactivo";
 
-export type ProductUnit = "pieza" | "metro" | "kg" | "set";
+export type ProductUnit = "pieza" | "metro" | "kg" | "g" | "ml" | "litro" | "set" | "paquete" | "rollo" | "formato";
 
 export type ProductCurrency = "MXN" | "USD" | "EUR";
 

@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowUp,
   AlertTriangle,
+  ChevronDown,
   ClipboardList,
   Clock3,
   Component,
@@ -18,10 +19,14 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Product } from "../../sales/types";
 import { componentProcessLabels, componentTypeLabels, productUnitLabels } from "../../sales/utils";
+import { plantSupplies } from "../../supplies/data";
+import { plantSupplyCategoryLabels } from "../../supplies/utils";
+import { so101SampleProductId } from "../data";
 import type {
   PreproductionProcessType,
   PreproductionResource,
   PreproductionRoute,
+  PreproductionRouteStatus,
   PreproductionStep,
   PreproductionStepComponentUse,
   PreproductionStepSubassemblyUse,
@@ -44,10 +49,11 @@ import {
 
 type PreproductionScreenProps = {
   products: Product[];
+  routes: PreproductionRoute[];
   onBack: () => void;
+  onOpenProducts: () => void;
+  onRoutesChange: (routes: PreproductionRoute[]) => void;
 };
-
-const routesStorageKey = "harv:preproduction-routes:v1";
 
 type ComponentUseDraft = {
   componentId: string;
@@ -60,6 +66,7 @@ type SubassemblyUseDraft = {
 };
 
 type ResourceDraft = {
+  supplyId: string;
   name: string;
   quantity: number;
   unit: string;
@@ -77,6 +84,7 @@ const emptySubassemblyUseDraft: SubassemblyUseDraft = {
 };
 
 const emptyToolDraft: ResourceDraft = {
+  supplyId: "",
   name: "",
   quantity: 1,
   unit: "pieza",
@@ -84,67 +92,42 @@ const emptyToolDraft: ResourceDraft = {
 };
 
 const emptyConsumableDraft: ResourceDraft = {
+  supplyId: "",
   name: "",
   quantity: 1,
-  unit: "pieza",
+  unit: "ml",
   notes: ""
 };
 
-function normalizeRoute(route: Partial<PreproductionRoute>, productId: string): PreproductionRoute {
-  const steps = Array.isArray(route.steps) ? route.steps : [];
+function getDefaultProductId(products: Product[]) {
+  return products.find((product) => product.id === so101SampleProductId || product.sku === "SO101")?.id ?? products[0]?.id ?? "";
+}
+
+function getProductFolderSummary(product: Product, route?: PreproductionRoute) {
+  const stepCount = route?.steps.length ?? 0;
+  const processCount = route?.steps.filter((step) => !step.isKittingStep).length ?? 0;
+
+  if (product.components.length === 0) {
+    return {
+      label: "Datos pendientes",
+      statusClass: "needs-data",
+      stepCount
+    };
+  }
+
+  if (!route || processCount === 0) {
+    return {
+      label: "Sin ruta",
+      statusClass: "empty",
+      stepCount
+    };
+  }
 
   return {
-    id: route.id ?? preproductionId("pre-route"),
-    productId: route.productId ?? productId,
-    status: route.status ?? "borrador",
-    steps: normalizeStepSequence(
-      steps.map((step, index) => ({
-        id: step.id ?? preproductionId("pre-step"),
-        sequence: step.sequence ?? index + 1,
-        isKittingStep: step.isKittingStep ?? false,
-        name: step.name ?? "",
-        processType: step.processType ?? "ensamble",
-        station: step.station ?? "",
-        estimatedMinutes: Number(step.estimatedMinutes ?? 1),
-        outputName: step.outputName ?? "",
-        outputQuantity: Number(step.outputQuantity ?? (step.outputName ? 1 : 0)),
-        outputUnit: step.outputUnit ?? "subensamble",
-        instructions: step.instructions ?? "",
-        kittingComponents: Array.isArray(step.kittingComponents) ? step.kittingComponents : [],
-        componentUses: Array.isArray(step.componentUses) ? step.componentUses : [],
-        subassemblyUses: Array.isArray(step.subassemblyUses) ? step.subassemblyUses : [],
-        tools: Array.isArray(step.tools) ? step.tools : [],
-        consumables: Array.isArray(step.consumables) ? step.consumables : []
-      }))
-    ),
-    updatedAt: route.updatedAt ?? nowIso()
+    label: preproductionRouteStatusLabels[route.status],
+    statusClass: route.status === "liberada" ? "ready" : route.status === "en-revision" ? "review" : "draft",
+    stepCount
   };
-}
-
-function loadStoredRoutes(products: Product[]) {
-  try {
-    const storedRoutes = window.localStorage.getItem(routesStorageKey);
-
-    if (!storedRoutes) {
-      return [];
-    }
-
-    const parsedRoutes = JSON.parse(storedRoutes);
-
-    return Array.isArray(parsedRoutes)
-      ? parsedRoutes.map((route) => normalizeRoute(route, products[0]?.id ?? ""))
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveStoredRoutes(routes: PreproductionRoute[]) {
-  try {
-    window.localStorage.setItem(routesStorageKey, JSON.stringify(routes));
-  } catch {
-    return;
-  }
 }
 
 function createKittingComponents(
@@ -203,7 +186,8 @@ function ensureKittingStep(route: PreproductionRoute, product: Product): Preprod
 function summarizeComponentUsage(
   route: PreproductionRoute | null,
   product: Product | undefined,
-  draft?: PreproductionStepDraft
+  draft?: PreproductionStepDraft,
+  excludedStepId = ""
 ) {
   if (!route || !product) {
     return [];
@@ -213,6 +197,10 @@ function summarizeComponentUsage(
   const draftUsageByComponent = new Map<string, number>();
 
   route.steps.forEach((step) => {
+    if (step.id === excludedStepId) {
+      return;
+    }
+
     step.componentUses.forEach((componentUse) => {
       usageByComponent.set(
         componentUse.componentId,
@@ -300,15 +288,22 @@ function getRouteBlockingMessages(route: PreproductionRoute, product: Product | 
   return [...overusedMessages, ...getSubassemblySequenceWarnings(route), ...getSubassemblyQuantityWarnings(route)];
 }
 
-export function PreproductionScreen({ products, onBack }: PreproductionScreenProps) {
-  const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");
-  const [routes, setRoutes] = useState<PreproductionRoute[]>(() => loadStoredRoutes(products));
+export function PreproductionScreen({
+  products,
+  routes,
+  onBack,
+  onOpenProducts,
+  onRoutesChange
+}: PreproductionScreenProps) {
+  const [selectedProductId, setSelectedProductId] = useState(getDefaultProductId(products));
   const [stepDraft, setStepDraft] = useState<PreproductionStepDraft>(emptyPreproductionStepDraft);
   const [componentUseDraft, setComponentUseDraft] = useState<ComponentUseDraft>(emptyComponentUseDraft);
   const [subassemblyUseDraft, setSubassemblyUseDraft] = useState<SubassemblyUseDraft>(emptySubassemblyUseDraft);
   const [toolDraft, setToolDraft] = useState<ResourceDraft>(emptyToolDraft);
   const [consumableDraft, setConsumableDraft] = useState<ResourceDraft>(emptyConsumableDraft);
   const [formError, setFormError] = useState("");
+  const [expandedStepId, setExpandedStepId] = useState("");
+  const [editingStepId, setEditingStepId] = useState("");
 
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) ?? products[0],
@@ -328,7 +323,7 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
   const resourceSummaries = selectedRoute ? summarizeRouteResourcesByStation(selectedRoute) : [];
   const stationTimeSummaries = selectedRoute ? summarizeRouteMinutesByStation(selectedRoute) : [];
   const processTimeSummaries = selectedRoute ? summarizeRouteMinutesByProcess(selectedRoute) : [];
-  const componentUsageSummaries = summarizeComponentUsage(selectedRoute, selectedProduct, stepDraft);
+  const componentUsageSummaries = summarizeComponentUsage(selectedRoute, selectedProduct, stepDraft, editingStepId);
   const overusedComponents = componentUsageSummaries.filter((componentUsage) => componentUsage.isOverused);
   const underusedComponents = componentUsageSummaries.filter(
     (componentUsage) => !componentUsage.isOverused && componentUsage.availableQuantity > 0
@@ -353,35 +348,30 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
   const totalSubassemblies = availableSubassemblies.length;
 
   useEffect(() => {
-    saveStoredRoutes(routes);
-  }, [routes]);
-
-  useEffect(() => {
     if (!selectedProduct) {
       return;
     }
 
-    setRoutes((currentRoutes) => {
-      const existingRoute = currentRoutes.find((route) => route.productId === selectedProduct.id);
-      const baseRoute = existingRoute ?? createEmptyRoute(selectedProduct.id);
-      const routeWithKitting = ensureKittingStep(baseRoute, selectedProduct);
+    const existingRoute = routes.find((route) => route.productId === selectedProduct.id);
+    const baseRoute = existingRoute ?? createEmptyRoute(selectedProduct.id);
+    const routeWithKitting = ensureKittingStep(baseRoute, selectedProduct);
 
-      if (existingRoute && JSON.stringify(existingRoute) === JSON.stringify(routeWithKitting)) {
-        return currentRoutes;
-      }
+    if (existingRoute && JSON.stringify(existingRoute) === JSON.stringify(routeWithKitting)) {
+      return;
+    }
 
-      const nextRoute = {
-        ...routeWithKitting,
-        updatedAt: nowIso()
-      };
+    const nextRoute = {
+      ...routeWithKitting,
+      updatedAt: nowIso()
+    };
 
-      if (!existingRoute) {
-        return [nextRoute, ...currentRoutes];
-      }
+    if (!existingRoute) {
+      onRoutesChange([nextRoute, ...routes]);
+      return;
+    }
 
-      return currentRoutes.map((route) => (route.productId === selectedProduct.id ? nextRoute : route));
-    });
-  }, [selectedProduct]);
+    onRoutesChange(routes.map((route) => (route.productId === selectedProduct.id ? nextRoute : route)));
+  }, [onRoutesChange, routes, selectedProduct]);
 
   function updateStepDraft<Key extends keyof PreproductionStepDraft>(key: Key, value: PreproductionStepDraft[Key]) {
     setStepDraft((currentDraft) => ({ ...currentDraft, [key]: value }));
@@ -492,8 +482,14 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
 
   function addResource(resourceType: "tool" | "consumable") {
     const resourceDraft = resourceType === "tool" ? toolDraft : consumableDraft;
+    const selectedSupply =
+      resourceType === "consumable"
+        ? plantSupplies.find((supply) => supply.id === resourceDraft.supplyId)
+        : undefined;
+    const resourceName = selectedSupply?.name ?? resourceDraft.name.trim();
+    const resourceUnit = selectedSupply?.unit ?? (resourceDraft.unit.trim() || "pieza");
 
-    if (!resourceDraft.name.trim()) {
+    if (!resourceName) {
       setFormError(resourceType === "tool" ? "Agrega nombre de herramienta." : "Agrega nombre de consumible.");
       return;
     }
@@ -505,10 +501,11 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
 
     const resource: PreproductionResource = {
       id: preproductionId(resourceType === "tool" ? "pre-tool" : "pre-consumable"),
-      name: resourceDraft.name.trim(),
+      supplyId: selectedSupply?.id ?? resourceDraft.supplyId,
+      name: resourceName,
       quantity: Number(resourceDraft.quantity),
-      unit: resourceDraft.unit.trim() || "pieza",
-      notes: resourceDraft.notes.trim()
+      unit: resourceUnit,
+      notes: resourceDraft.notes.trim() || selectedSupply?.notes || ""
     };
 
     setStepDraft((currentDraft) => ({
@@ -539,15 +536,68 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
   }
 
   function upsertRoute(nextRoute: PreproductionRoute) {
-    setRoutes((currentRoutes) => {
-      const routeExists = currentRoutes.some((route) => route.productId === nextRoute.productId);
+    const routeExists = routes.some((route) => route.productId === nextRoute.productId);
 
-      if (!routeExists) {
-        return [nextRoute, ...currentRoutes];
-      }
+    if (!routeExists) {
+      onRoutesChange([nextRoute, ...routes]);
+      return;
+    }
 
-      return currentRoutes.map((route) => (route.productId === nextRoute.productId ? nextRoute : route));
+    onRoutesChange(routes.map((route) => (route.productId === nextRoute.productId ? nextRoute : route)));
+  }
+
+  function updateRouteStatus(status: PreproductionRouteStatus) {
+    if (!selectedRoute || !selectedProduct) {
+      return;
+    }
+
+    upsertRoute({
+      ...selectedRoute,
+      productId: selectedProduct.id,
+      status,
+      updatedAt: nowIso()
     });
+  }
+
+  function resetStepBuilder() {
+    setStepDraft(emptyPreproductionStepDraft);
+    setComponentUseDraft(emptyComponentUseDraft);
+    setSubassemblyUseDraft(emptySubassemblyUseDraft);
+    setToolDraft(emptyToolDraft);
+    setConsumableDraft(emptyConsumableDraft);
+    setEditingStepId("");
+    setFormError("");
+  }
+
+  function startEditingStep(step: PreproductionStep) {
+    if (step.isKittingStep) {
+      setFormError("El paso de kitting se actualiza automaticamente desde componentes.");
+      return;
+    }
+
+    setStepDraft({
+      isKittingStep: false,
+      name: step.name,
+      processType: step.processType,
+      station: step.station,
+      estimatedMinutes: step.estimatedMinutes,
+      outputName: step.outputName,
+      outputQuantity: step.outputQuantity,
+      outputUnit: step.outputUnit,
+      instructions: step.instructions,
+      kittingComponents: [],
+      componentUses: step.componentUses.map((componentUse) => ({ ...componentUse })),
+      subassemblyUses: step.subassemblyUses.map((subassemblyUse) => ({ ...subassemblyUse })),
+      tools: step.tools.map((tool) => ({ ...tool })),
+      consumables: step.consumables.map((consumable) => ({ ...consumable }))
+    });
+    setComponentUseDraft(emptyComponentUseDraft);
+    setSubassemblyUseDraft(emptySubassemblyUseDraft);
+    setToolDraft(emptyToolDraft);
+    setConsumableDraft(emptyConsumableDraft);
+    setEditingStepId(step.id);
+    setExpandedStepId(step.id);
+    setFormError("");
   }
 
   function addStep(event: FormEvent<HTMLFormElement>) {
@@ -573,10 +623,13 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
       return;
     }
 
+    const existingStep = editingStepId
+      ? selectedRoute.steps.find((step) => step.id === editingStepId && !step.isKittingStep)
+      : null;
     const nextStep: PreproductionStep = {
-      id: preproductionId("pre-step"),
-      sequence: selectedRoute.steps.length + 1,
-      isKittingStep: false,
+      id: existingStep?.id ?? preproductionId("pre-step"),
+      sequence: existingStep?.sequence ?? selectedRoute.steps.length + 1,
+      isKittingStep: existingStep?.isKittingStep ?? false,
       name: stepDraft.name.trim(),
       processType: stepDraft.processType,
       station: stepDraft.station.trim(),
@@ -591,11 +644,14 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
       tools: stepDraft.tools,
       consumables: stepDraft.consumables
     };
+    const nextSteps = editingStepId
+      ? selectedRoute.steps.map((step) => (step.id === editingStepId ? nextStep : step))
+      : [...selectedRoute.steps, nextStep];
 
     const nextRoute = {
       ...selectedRoute,
       productId: selectedProduct.id,
-      steps: normalizeStepSequence([...selectedRoute.steps, nextStep]),
+      steps: normalizeStepSequence(nextSteps),
       updatedAt: nowIso()
     };
     const blockingMessages = getRouteBlockingMessages(nextRoute, selectedProduct);
@@ -606,12 +662,8 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
     }
 
     upsertRoute(nextRoute);
-    setStepDraft(emptyPreproductionStepDraft);
-    setComponentUseDraft(emptyComponentUseDraft);
-    setSubassemblyUseDraft(emptySubassemblyUseDraft);
-    setToolDraft(emptyToolDraft);
-    setConsumableDraft(emptyConsumableDraft);
-    setFormError("");
+    setExpandedStepId(nextStep.id);
+    resetStepBuilder();
   }
 
   function removeStep(stepId: string) {
@@ -636,6 +688,9 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
       ),
       updatedAt: nowIso()
     });
+    if (editingStepId === stepId) {
+      resetStepBuilder();
+    }
   }
 
   function duplicateStep(stepId: string) {
@@ -688,6 +743,7 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
     }
 
     upsertRoute(nextRoute);
+    setExpandedStepId(duplicatedStep.id);
     setFormError("");
   }
 
@@ -753,20 +809,63 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
 
       <section className="preproduction-body">
         <section className="preproduction-command-panel">
-          <div>
+          <div className="preproduction-command-heading">
             <span className="section-kicker">Ruta base</span>
             <h2>{selectedProduct?.name ?? "Sin producto seleccionado"}</h2>
           </div>
-          <label className="field preproduction-product-select">
-            <span>Producto</span>
-            <select value={selectedProduct?.id ?? ""} onChange={(event) => setSelectedProductId(event.target.value)}>
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.sku} · {product.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="preproduction-folder-tabs" role="tablist" aria-label="Productos de preproduccion">
+            {products.map((product) => {
+              const productRoute = routes.find((route) => route.productId === product.id);
+              const folderSummary = getProductFolderSummary(product, productRoute);
+              const isActive = selectedProduct?.id === product.id;
+
+              return (
+                <button
+                  className={`preproduction-folder-tab ${folderSummary.statusClass} ${isActive ? "active" : ""}`}
+                  key={product.id}
+                  onClick={() => {
+                    setSelectedProductId(product.id);
+                    setExpandedStepId("");
+                    resetStepBuilder();
+                  }}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls="preproduction-product-workspace"
+                  aria-label={`Abrir producto ${product.sku || product.name}`}
+                >
+                  <span className="preproduction-folder-tab-top">
+                    <span className="preproduction-folder-status" aria-hidden="true" />
+                    <span>{product.sku || "Sin SKU"}</span>
+                  </span>
+                  <strong>{product.name || "Producto sin nombre"}</strong>
+                  <small>
+                    {folderSummary.label} / {folderSummary.stepCount} pasos
+                  </small>
+                </button>
+              );
+            })}
+
+            <button
+              className="preproduction-folder-tab add-product"
+              onClick={() => {
+                setExpandedStepId("");
+                resetStepBuilder();
+                onOpenProducts();
+              }}
+              type="button"
+              role="tab"
+              aria-selected={false}
+              aria-label="Agregar producto"
+            >
+              <span className="preproduction-folder-tab-top">
+                <Plus size={15} aria-hidden="true" />
+                <span>Nuevo</span>
+              </span>
+              <strong>Producto</strong>
+              <small>Completar datos base</small>
+            </button>
+          </div>
         </section>
 
         <section className="preproduction-stat-grid" aria-label="Resumen de preproducción">
@@ -807,7 +906,7 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
           </article>
         </section>
 
-        <section className="preproduction-layout">
+        <section className="preproduction-layout" id="preproduction-product-workspace">
           <aside className="main-panel preproduction-product-panel">
             <div className="clean-section-heading">
               <div>
@@ -851,7 +950,32 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
             <div className="clean-section-heading">
               <div>
                 <h2>Ruta de preproducción</h2>
-                <p>Estado: {selectedRoute ? preproductionRouteStatusLabels[selectedRoute.status] : "Sin ruta"}</p>
+                <p>
+                  {editingStepId
+                    ? `Editando paso ${selectedRoute?.steps.find((step) => step.id === editingStepId)?.sequence ?? ""}`
+                    : `Estado: ${selectedRoute ? preproductionRouteStatusLabels[selectedRoute.status] : "Sin ruta"}`}
+                </p>
+              </div>
+              <div className="preproduction-route-actions">
+                <label className="field compact-field">
+                  <span>Estado</span>
+                  <select
+                    value={selectedRoute?.status ?? "borrador"}
+                    onChange={(event) => updateRouteStatus(event.target.value as PreproductionRouteStatus)}
+                    disabled={!selectedRoute}
+                  >
+                    {Object.entries(preproductionRouteStatusLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {editingStepId ? (
+                  <button className="secondary-button compact-button" onClick={resetStepBuilder} type="button">
+                    Cancelar edicion
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -1099,6 +1223,30 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
                   </div>
                   <div className="preproduction-resource-form">
                     <label className="field">
+                      <span>Insumo catalogado</span>
+                      <select
+                        value={consumableDraft.supplyId}
+                        onChange={(event) => {
+                          const supply = plantSupplies.find((currentSupply) => currentSupply.id === event.target.value);
+
+                          setConsumableDraft((currentDraft) => ({
+                            ...currentDraft,
+                            supplyId: supply?.id ?? "",
+                            name: supply?.name ?? currentDraft.name,
+                            unit: supply?.unit ?? currentDraft.unit,
+                            notes: currentDraft.notes || supply?.notes || ""
+                          }));
+                        }}
+                      >
+                        <option value="">Sin catalogar / manual</option>
+                        {plantSupplies.map((supply) => (
+                          <option key={supply.id} value={supply.id}>
+                            {supply.name} / {plantSupplyCategoryLabels[supply.category]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
                       <span>Consumible</span>
                       <input
                         value={consumableDraft.name}
@@ -1163,13 +1311,37 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
 
               <button className="primary-button input-height-button" type="submit">
                 <Plus size={17} />
-                Agregar paso
+                {editingStepId ? "Guardar cambios" : "Agregar paso"}
               </button>
             </form>
 
             <div className="preproduction-step-list">
-              {selectedRoute?.steps.map((step) => (
-                <article className="preproduction-step-card" key={step.id}>
+              {selectedRoute?.steps.map((step) => {
+                const isExpanded = expandedStepId === step.id;
+
+                return (
+                  <article className={`preproduction-step-card ${isExpanded ? "expanded" : ""}`} key={step.id}>
+                  <button
+                    className="preproduction-step-toggle"
+                    onClick={() => setExpandedStepId(isExpanded ? "" : step.id)}
+                    type="button"
+                    aria-expanded={isExpanded}
+                  >
+                    <span className="preproduction-step-number">
+                      <span>Paso</span>
+                      <strong>{step.sequence}</strong>
+                    </span>
+                    <span className="preproduction-step-summary">
+                      <span>{preproductionProcessLabels[step.processType]}</span>
+                      <strong>{step.name}</strong>
+                      <small>
+                        {step.station}
+                        {step.outputName ? ` / Produce ${formatStepOutput(step)}` : ""}
+                      </small>
+                    </span>
+                    <span className="preproduction-time-pill">{formatRouteMinutes(step.estimatedMinutes)}</span>
+                    <ChevronDown size={18} aria-hidden="true" />
+                  </button>
                   <div className="preproduction-step-number">
                     <span>Paso</span>
                     <strong>{step.sequence}</strong>
@@ -1242,6 +1414,13 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
                     ) : (
                       <>
                         <button
+                          className="secondary-button compact-button"
+                          onClick={() => startEditingStep(step)}
+                          type="button"
+                        >
+                          Editar paso
+                        </button>
+                        <button
                           className="icon-button ghost"
                           onClick={() => moveStep(step.id, -1)}
                           type="button"
@@ -1276,8 +1455,9 @@ export function PreproductionScreen({ products, onBack }: PreproductionScreenPro
                       </>
                     )}
                   </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
 
               {selectedRoute && selectedRoute.steps.length === 0 ? (
                 <p className="empty-state">Aún no hay pasos para este producto.</p>

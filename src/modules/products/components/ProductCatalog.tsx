@@ -1,5 +1,5 @@
 import { Edit3, PackagePlus, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Product } from "../../sales/types";
 import { componentTypeLabels, formatCurrency, productMatches, productStatusLabels } from "../../sales/utils";
 import { ProductEditorModal } from "./ProductEditorModal";
@@ -8,12 +8,28 @@ type ProductDraft = Omit<Product, "id">;
 
 type ProductCatalogProps = {
   products: Product[];
+  openNewProduct?: boolean;
+  onNewProductOpened?: () => void;
   onSaveProduct: (product: ProductDraft, existingProduct?: Product) => void;
 };
 
-export function ProductCatalog({ products, onSaveProduct }: ProductCatalogProps) {
+export function ProductCatalog({
+  products,
+  openNewProduct = false,
+  onNewProductOpened,
+  onSaveProduct
+}: ProductCatalogProps) {
   const [query, setQuery] = useState("");
   const [productEditorModal, setProductEditorModal] = useState<{ product?: Product } | null>(null);
+
+  useEffect(() => {
+    if (!openNewProduct) {
+      return;
+    }
+
+    setProductEditorModal({});
+    onNewProductOpened?.();
+  }, [openNewProduct, onNewProductOpened]);
 
   const productResults = useMemo(() => {
     return products.filter((product) => productMatches(product, query));

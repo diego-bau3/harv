@@ -4,11 +4,19 @@ import { ProductCatalog } from "./ProductCatalog";
 
 type ProductCatalogScreenProps = {
   products: Product[];
+  openNewProduct?: boolean;
   onBack: () => void;
+  onNewProductOpened?: () => void;
   onSaveProduct: (product: Omit<Product, "id">, existingProduct?: Product) => void;
 };
 
-export function ProductCatalogScreen({ products, onBack, onSaveProduct }: ProductCatalogScreenProps) {
+export function ProductCatalogScreen({
+  products,
+  openNewProduct = false,
+  onBack,
+  onNewProductOpened,
+  onSaveProduct
+}: ProductCatalogScreenProps) {
   return (
     <main className="profile-screen product-profile-screen">
       <header className="screen-header">
@@ -24,7 +32,12 @@ export function ProductCatalogScreen({ products, onBack, onSaveProduct }: Produc
       </header>
 
       <section className="product-profile-body">
-        <ProductCatalog products={products} onSaveProduct={onSaveProduct} />
+        <ProductCatalog
+          openNewProduct={openNewProduct}
+          products={products}
+          onNewProductOpened={onNewProductOpened}
+          onSaveProduct={onSaveProduct}
+        />
       </section>
     </main>
   );

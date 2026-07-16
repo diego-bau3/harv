@@ -28,6 +28,7 @@ export type PreproductionStepSubassemblyUse = {
 
 export type PreproductionResource = {
   id: string;
+  supplyId?: string;
   name: string;
   quantity: number;
   unit: string;

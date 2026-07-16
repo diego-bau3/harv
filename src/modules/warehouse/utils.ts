@@ -33,7 +33,13 @@ export const warehouseUnitLabels: Record<ProductUnit, string> = {
   pieza: "Pieza",
   metro: "Metro",
   kg: "Kg",
-  set: "Set"
+  g: "g",
+  ml: "ml",
+  litro: "Litro",
+  set: "Set",
+  paquete: "Paquete",
+  rollo: "Rollo",
+  formato: "Formato"
 };
 
 const rowLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";

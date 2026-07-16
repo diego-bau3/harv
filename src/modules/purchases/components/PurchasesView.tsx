@@ -530,7 +530,9 @@ export function PurchasesView({
           const sourceLabel =
             request.source === "producto"
               ? "Desde Productos"
-              : request.source === "almacen"
+              : request.source === "preproduccion"
+                ? "Desde Preproduccion"
+                : request.source === "almacen"
                 ? "Desde Almacén"
                 : request.source === "work-order"
                   ? "Desde Work Order"
