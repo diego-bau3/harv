@@ -10,6 +10,7 @@ import {
   LineChart,
   PackageCheck,
   PackageSearch,
+  Route,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
@@ -70,6 +71,13 @@ export const profiles: Profile[] = [
     icon: HardHat,
     accent: "#82643a",
     tint: "#f7f0e3"
+  },
+  {
+    id: "pre-produccion",
+    name: "Preproducción",
+    icon: Route,
+    accent: "#9a5438",
+    tint: "#fff0e7"
   },
   {
     id: "produccion",

@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   Boxes,
   CalendarClock,
@@ -15,6 +16,14 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import type {
+  PendingReceipt,
+  PurchaseOrder,
+  PurchaseReceiptIssue,
+  PurchaseReceiptLineUpdate,
+  PurchaseReceiptStatus
+} from "../../purchases/types";
+import { pendingReceiptStatusLabels, purchaseReceiptIssueLabels } from "../../purchases/utils";
 import type { Product, ProductComponent, ProductUnit } from "../../sales/types";
 import { createId, todayIso } from "../../sales/utils";
 import { defaultWarehouseLayoutConfig, initialWarehouseEntries } from "../data";
@@ -47,7 +56,16 @@ import {
 
 type WarehouseScreenProps = {
   products: Product[];
+  pendingReceipts: PendingReceipt[];
+  purchaseOrders: PurchaseOrder[];
   onBack: () => void;
+  onReceivePurchaseReceipt: (
+    receiptId: string,
+    lineUpdates: PurchaseReceiptLineUpdate[],
+    status: PurchaseReceiptStatus,
+    issue: PurchaseReceiptIssue | "",
+    issueNotes: string
+  ) => void;
 };
 
 type ComponentOption = {
@@ -55,6 +73,21 @@ type ComponentOption = {
   productName: string;
   productSku: string;
   component: ProductComponent;
+};
+
+type ReceiptLineDraft = {
+  receivedQuantity: number;
+  damagedQuantity: number;
+  reviewQuantity: number;
+  receiptNotes: string;
+};
+
+type ReceiptDraft = {
+  lines: Record<string, ReceiptLineDraft>;
+  issue: PurchaseReceiptIssue | "";
+  issueNotes: string;
+  receivedBy: string;
+  locationId: string;
 };
 
 const entriesStorageKey = "harv:warehouse-entries:v2";
@@ -111,6 +144,10 @@ function createAllocation(locationId: string, quantity = 1): WarehouseEntryAlloc
 
 function getAllocationTotal(allocations: WarehouseEntryAllocation[]) {
   return allocations.reduce((total, allocation) => total + Number(allocation.quantity || 0), 0);
+}
+
+function clampQuantity(value: number, maxQuantity: number) {
+  return Math.max(0, Math.min(Number(value || 0), maxQuantity));
 }
 
 function normalizeStoredAllocations(entry: Partial<WarehouseEntry>, fallbackLocationId: string) {
@@ -226,13 +263,20 @@ function saveStoredEntries(entries: WarehouseEntry[]) {
   }
 }
 
-export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
+export function WarehouseScreen({
+  pendingReceipts,
+  products,
+  purchaseOrders,
+  onBack,
+  onReceivePurchaseReceipt
+}: WarehouseScreenProps) {
   const [layoutConfig, setLayoutConfig] = useState<WarehouseLayoutConfig>(loadStoredLayoutConfig);
   const warehouseLocations = useMemo(() => createWarehouseLocations(layoutConfig), [layoutConfig]);
   const mapSize = useMemo(() => getMapSize(layoutConfig), [layoutConfig]);
   const defaultLocationId = warehouseLocations[0]?.id ?? "";
   const [entries, setEntries] = useState<WarehouseEntry[]>(() => loadStoredEntries(defaultLocationId));
   const [draft, setDraft] = useState<WarehouseEntryDraft>(() => createEmptyDraft(defaultLocationId));
+  const [receiptDrafts, setReceiptDrafts] = useState<Record<string, ReceiptDraft>>({});
   const [selectedComponentId, setSelectedComponentId] = useState("manual");
   const [entryQuery, setEntryQuery] = useState("");
   const [formError, setFormError] = useState("");
@@ -280,6 +324,14 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
     );
   }, [products]);
 
+  const receiptOrderById = useMemo(() => {
+    return new Map(purchaseOrders.map((order) => [order.id, order]));
+  }, [purchaseOrders]);
+
+  const activePurchaseReceipts = useMemo(() => {
+    return pendingReceipts.filter((receipt) => receipt.status !== "recibida");
+  }, [pendingReceipts]);
+
   const inventory = useMemo(() => calculateInventory(entries, warehouseLocations), [entries, warehouseLocations]);
   const locationInventory = useMemo(
     () => calculateLocationInventory(inventory, warehouseLocations),
@@ -296,7 +348,17 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
 
   const entriesToday = entries.filter((entry) => entry.receivedAt === todayIso()).length;
   const totalQuantity = entries.reduce((total, entry) => total + entry.quantity, 0);
-  const incomingQuantity = entries.reduce((total, entry) => total + entry.incomingQuantity, 0);
+  const purchaseIncomingQuantity = activePurchaseReceipts.reduce(
+    (receiptTotal, receipt) =>
+      receiptTotal +
+      receipt.lines.reduce(
+        (lineTotal, line) =>
+          lineTotal + Math.max(line.quantity - line.receivedQuantity - line.damagedQuantity - line.reviewQuantity, 0),
+        0
+      ),
+    0
+  );
+  const incomingQuantity = entries.reduce((total, entry) => total + entry.incomingQuantity, 0) + purchaseIncomingQuantity;
   const usedLocations = new Set(
     entries.flatMap((entry) => entry.allocations.map((allocation) => allocation.locationId))
   ).size;
@@ -324,6 +386,215 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
 
       return { ...currentDraft, [key]: value };
     });
+  }
+
+  function buildReceiptDraft(receipt: PendingReceipt, existingDraft?: ReceiptDraft): ReceiptDraft {
+    const locationId =
+      existingDraft?.locationId && warehouseLocations.some((location) => location.id === existingDraft.locationId)
+        ? existingDraft.locationId
+        : defaultLocationId;
+    const lines = receipt.lines.reduce<Record<string, ReceiptLineDraft>>((draftLines, line) => {
+      const existingLineDraft = existingDraft?.lines[line.id];
+      const defaultReceivedQuantity = receipt.status === "por-recibir" ? line.quantity : line.receivedQuantity;
+
+      draftLines[line.id] = {
+        receivedQuantity: existingLineDraft?.receivedQuantity ?? defaultReceivedQuantity,
+        damagedQuantity: existingLineDraft?.damagedQuantity ?? line.damagedQuantity,
+        reviewQuantity: existingLineDraft?.reviewQuantity ?? line.reviewQuantity,
+        receiptNotes: existingLineDraft?.receiptNotes ?? line.receiptNotes
+      };
+
+      return draftLines;
+    }, {});
+
+    return {
+      lines,
+      issue: existingDraft?.issue ?? receipt.issue ?? "",
+      issueNotes: existingDraft?.issueNotes ?? receipt.issueNotes ?? "",
+      receivedBy: existingDraft?.receivedBy ?? "",
+      locationId
+    };
+  }
+
+  function receiptDraftFor(receipt: PendingReceipt) {
+    return buildReceiptDraft(receipt, receiptDrafts[receipt.id]);
+  }
+
+  function updateReceiptDraft<Key extends keyof ReceiptDraft>(receipt: PendingReceipt, key: Key, value: ReceiptDraft[Key]) {
+    setReceiptDrafts((currentDrafts) => {
+      const currentDraft = buildReceiptDraft(receipt, currentDrafts[receipt.id]);
+
+      return {
+        ...currentDrafts,
+        [receipt.id]: {
+          ...currentDraft,
+          [key]: value
+        }
+      };
+    });
+  }
+
+  function updateReceiptLineDraft<Key extends keyof ReceiptLineDraft>(
+    receipt: PendingReceipt,
+    lineId: string,
+    key: Key,
+    value: ReceiptLineDraft[Key]
+  ) {
+    setReceiptDrafts((currentDrafts) => {
+      const currentDraft = buildReceiptDraft(receipt, currentDrafts[receipt.id]);
+
+      return {
+        ...currentDrafts,
+        [receipt.id]: {
+          ...currentDraft,
+          lines: {
+            ...currentDraft.lines,
+            [lineId]: {
+              ...currentDraft.lines[lineId],
+              [key]: value
+            }
+          }
+        }
+      };
+    });
+  }
+
+  function getReceiptLineMaterialType(line: PendingReceipt["lines"][number]) {
+    const product = products.find((currentProduct) => currentProduct.id === line.productId);
+    const component = product?.components.find((currentComponent) => currentComponent.id === line.componentId);
+
+    return component ? materialTypeFromComponentType(component.type) : "componente";
+  }
+
+  function createReceiptWarehouseEntry(
+    receipt: PendingReceipt,
+    line: PendingReceipt["lines"][number],
+    quantity: number,
+    status: WarehouseEntryStatus,
+    receiptDraft: ReceiptDraft,
+    statusNote: string
+  ): WarehouseEntry {
+    const locationId = receiptDraft.locationId || defaultLocationId;
+    const lineDraft = receiptDraft.lines[line.id];
+    const notes = [`Desde OC ${receipt.purchaseOrderFolio}`, statusNote, lineDraft?.receiptNotes, receiptDraft.issueNotes]
+      .filter(Boolean)
+      .join(". ");
+
+    return {
+      id: createId("entry"),
+      receivedAt: todayIso(),
+      itemName: line.itemName,
+      sku: line.productSku,
+      materialType: getReceiptLineMaterialType(line),
+      quantity,
+      incomingQuantity: 0,
+      expectedArrivalDate: "",
+      unit: line.unit,
+      locationId,
+      maxPerLocation: 0,
+      allocations: [createAllocation(locationId, quantity)],
+      supplier: receipt.supplierName,
+      receivedBy: receiptDraft.receivedBy.trim(),
+      status,
+      notes
+    };
+  }
+
+  function receiveReceipt(receipt: PendingReceipt, status: PurchaseReceiptStatus) {
+    const receiptDraft = receiptDraftFor(receipt);
+    const lineUpdates = receipt.lines.map((line): PurchaseReceiptLineUpdate => {
+      if (status === "recibida") {
+        return {
+          lineId: line.id,
+          receivedQuantity: line.quantity,
+          damagedQuantity: 0,
+          reviewQuantity: 0,
+          receiptNotes: receiptDraft.lines[line.id]?.receiptNotes ?? ""
+        };
+      }
+
+      const lineDraft = receiptDraft.lines[line.id];
+
+      return {
+        lineId: line.id,
+        receivedQuantity: clampQuantity(lineDraft?.receivedQuantity ?? 0, line.quantity),
+        damagedQuantity: clampQuantity(lineDraft?.damagedQuantity ?? 0, line.quantity),
+        reviewQuantity: clampQuantity(lineDraft?.reviewQuantity ?? 0, line.quantity),
+        receiptNotes: lineDraft?.receiptNotes.trim() ?? ""
+      };
+    });
+    const hasOverAssignedLine = lineUpdates.some((lineUpdate) => {
+      const line = receipt.lines.find((currentLine) => currentLine.id === lineUpdate.lineId);
+      const totalQuantity = lineUpdate.receivedQuantity + lineUpdate.damagedQuantity + lineUpdate.reviewQuantity;
+
+      return Boolean(line && totalQuantity - line.quantity > quantityTolerance);
+    });
+
+    if (hasOverAssignedLine) {
+      setFormError("En una línea, recibido + dañado + revisión no puede exceder la cantidad comprada.");
+      return;
+    }
+
+    const hasDamagedQuantity = lineUpdates.some((lineUpdate) => lineUpdate.damagedQuantity > 0);
+    const issue: PurchaseReceiptIssue | "" =
+      status === "parcial"
+        ? "incompleto"
+        : status === "pendiente-revision"
+          ? "revision"
+          : status === "problema"
+            ? receiptDraft.issue || (hasDamagedQuantity ? "danado" : "otro")
+            : "";
+    const newEntries = receipt.lines.flatMap((line) => {
+      const lineUpdate = lineUpdates.find((currentUpdate) => currentUpdate.lineId === line.id);
+
+      if (!lineUpdate) {
+        return [];
+      }
+
+      const receivedDelta = Math.max(lineUpdate.receivedQuantity - line.receivedQuantity, 0);
+      const damagedDelta = Math.max(lineUpdate.damagedQuantity - line.damagedQuantity, 0);
+      const reviewDelta = Math.max(lineUpdate.reviewQuantity - line.reviewQuantity, 0);
+      const entriesToAdd: WarehouseEntry[] = [];
+
+      if (receivedDelta > 0) {
+        entriesToAdd.push(
+          createReceiptWarehouseEntry(receipt, line, receivedDelta, "disponible", receiptDraft, "Material disponible")
+        );
+      }
+
+      if (reviewDelta > 0) {
+        entriesToAdd.push(
+          createReceiptWarehouseEntry(
+            receipt,
+            line,
+            reviewDelta,
+            "pendiente-revision",
+            receiptDraft,
+            "Material pendiente de revisión"
+          )
+        );
+      }
+
+      if (damagedDelta > 0) {
+        entriesToAdd.push(
+          createReceiptWarehouseEntry(receipt, line, damagedDelta, "danado", receiptDraft, "Material dañado")
+        );
+      }
+
+      return entriesToAdd;
+    });
+
+    if (newEntries.length > 0) {
+      setEntries((currentEntries) => [...newEntries, ...currentEntries]);
+    }
+
+    onReceivePurchaseReceipt(receipt.id, lineUpdates, status, issue, receiptDraft.issueNotes.trim());
+    setReceiptDrafts((currentDrafts) => {
+      const nextDrafts = { ...currentDrafts };
+      delete nextDrafts[receipt.id];
+      return nextDrafts;
+    });
+    setFormError("");
   }
 
   function updateAllocation(allocationId: string, patch: Partial<WarehouseEntryAllocation>) {
@@ -653,6 +924,201 @@ export function WarehouseScreen({ products, onBack }: WarehouseScreenProps) {
             <strong>{usedLocations}</strong>
           </article>
         </section>
+
+        {activePurchaseReceipts.length > 0 ? (
+          <section className="main-panel warehouse-purchase-receipts">
+            <div className="clean-section-heading">
+              <div>
+                <h2>Órdenes de compra por recibir</h2>
+                <p>Recepción conectada con Compras: completo, parcial, dañado o pendiente de revisión.</p>
+              </div>
+            </div>
+
+            {formError ? <p className="form-error">{formError}</p> : null}
+
+            <div className="warehouse-receipt-list">
+              {activePurchaseReceipts.map((receipt) => {
+                const receiptDraft = receiptDraftFor(receipt);
+                const order = receiptOrderById.get(receipt.purchaseOrderId);
+
+                return (
+                  <article className="warehouse-receipt-card" key={receipt.id}>
+                    <header className="warehouse-receipt-header">
+                      <div>
+                        <span>{receipt.purchaseOrderFolio}</span>
+                        <strong>{receipt.supplierName}</strong>
+                        <p>
+                          Llega {formatWarehouseDate(receipt.expectedDate)} · {receipt.internalDestination}
+                          {order ? ` · ${order.lines.length} líneas en OC` : ""}
+                        </p>
+                      </div>
+                      <span className={`purchase-pill status-${receipt.status}`}>
+                        {pendingReceiptStatusLabels[receipt.status]}
+                      </span>
+                    </header>
+
+                    <div className="warehouse-receipt-lines">
+                      {receipt.lines.map((line) => {
+                        const lineDraft = receiptDraft.lines[line.id];
+                        const pendingQuantity = Math.max(
+                          line.quantity - line.receivedQuantity - line.damagedQuantity - line.reviewQuantity,
+                          0
+                        );
+
+                        return (
+                          <section className="warehouse-receipt-line" key={line.id}>
+                            <div className="warehouse-receipt-line-main">
+                              <strong>{line.itemName}</strong>
+                              <span>
+                                {line.productSku || "Compra manual"} · pendiente {formatQuantity(pendingQuantity, line.unit)} de{" "}
+                                {formatQuantity(line.quantity, line.unit)}
+                              </span>
+                            </div>
+
+                            <div className="warehouse-receipt-line-controls">
+                              <label className="field">
+                                <span>Recibido</span>
+                                <input
+                                  min="0"
+                                  step="0.01"
+                                  type="number"
+                                  value={lineDraft.receivedQuantity}
+                                  onChange={(event) =>
+                                    updateReceiptLineDraft(
+                                      receipt,
+                                      line.id,
+                                      "receivedQuantity",
+                                      Number(event.target.value)
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label className="field">
+                                <span>Dañado</span>
+                                <input
+                                  min="0"
+                                  step="0.01"
+                                  type="number"
+                                  value={lineDraft.damagedQuantity}
+                                  onChange={(event) =>
+                                    updateReceiptLineDraft(
+                                      receipt,
+                                      line.id,
+                                      "damagedQuantity",
+                                      Number(event.target.value)
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label className="field">
+                                <span>Revisión</span>
+                                <input
+                                  min="0"
+                                  step="0.01"
+                                  type="number"
+                                  value={lineDraft.reviewQuantity}
+                                  onChange={(event) =>
+                                    updateReceiptLineDraft(
+                                      receipt,
+                                      line.id,
+                                      "reviewQuantity",
+                                      Number(event.target.value)
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label className="field">
+                                <span>Notas línea</span>
+                                <input
+                                  value={lineDraft.receiptNotes}
+                                  onChange={(event) =>
+                                    updateReceiptLineDraft(receipt, line.id, "receiptNotes", event.target.value)
+                                  }
+                                  placeholder={warehouseUnitLabels[line.unit]}
+                                />
+                              </label>
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
+
+                    <div className="warehouse-receipt-footer">
+                      <label className="field">
+                        <span>Recibió</span>
+                        <input
+                          value={receiptDraft.receivedBy}
+                          onChange={(event) => updateReceiptDraft(receipt, "receivedBy", event.target.value)}
+                          placeholder="Nombre"
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Ubicación</span>
+                        <select
+                          value={receiptDraft.locationId}
+                          onChange={(event) => updateReceiptDraft(receipt, "locationId", event.target.value)}
+                        >
+                          {warehouseLocations.map((location) => (
+                            <option key={location.id} value={location.id}>
+                              {location.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Tipo problema</span>
+                        <select
+                          value={receiptDraft.issue}
+                          onChange={(event) =>
+                            updateReceiptDraft(receipt, "issue", event.target.value as PurchaseReceiptIssue | "")
+                          }
+                        >
+                          <option value="">Sin problema</option>
+                          {Object.entries(purchaseReceiptIssueLabels).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field wide-field">
+                        <span>Notas de recepción</span>
+                        <input
+                          value={receiptDraft.issueNotes}
+                          onChange={(event) => updateReceiptDraft(receipt, "issueNotes", event.target.value)}
+                          placeholder="Faltante, daño, guía, empaque, lote"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="warehouse-receipt-actions">
+                      <button className="primary-button compact-button" onClick={() => receiveReceipt(receipt, "recibida")} type="button">
+                        <PackageCheck size={15} />
+                        Recibir completo
+                      </button>
+                      <button className="secondary-button compact-button" onClick={() => receiveReceipt(receipt, "parcial")} type="button">
+                        <ClipboardList size={15} />
+                        Registrar parcial
+                      </button>
+                      <button
+                        className="secondary-button compact-button"
+                        onClick={() => receiveReceipt(receipt, "pendiente-revision")}
+                        type="button"
+                      >
+                        <Eye size={15} />
+                        Mandar a revisión
+                      </button>
+                      <button className="secondary-button compact-button danger-button" onClick={() => receiveReceipt(receipt, "problema")} type="button">
+                        <AlertTriangle size={15} />
+                        Reportar problema
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         <section className="main-panel warehouse-layout-config-panel">
           <div className="clean-section-heading">

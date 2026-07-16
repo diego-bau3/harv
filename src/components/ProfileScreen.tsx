@@ -1,6 +1,19 @@
 import { ArrowLeft } from "lucide-react";
 import type { Profile } from "../data/profiles";
 import { FabricationScreen } from "../modules/fabrication/components/FabricationScreen";
+import { PreproductionScreen } from "../modules/preproduction/components/PreproductionScreen";
+import { PurchasesView } from "../modules/purchases/components/PurchasesView";
+import type {
+  PendingReceipt,
+  PurchaseMessage,
+  PurchaseOrder,
+  PurchaseOrderDocument,
+  PurchaseRequest,
+  PurchaseReceiptIssue,
+  PurchaseReceiptLineUpdate,
+  PurchaseReceiptStatus,
+  PurchaseSupplier
+} from "../modules/purchases/types";
 import { SalesView } from "../modules/sales/components/SalesView";
 import type { Product } from "../modules/sales/types";
 import { WarehouseScreen } from "../modules/warehouse/components/WarehouseScreen";
@@ -8,22 +21,85 @@ import { WarehouseScreen } from "../modules/warehouse/components/WarehouseScreen
 type ProfileScreenProps = {
   profile: Profile;
   products: Product[];
+  suppliers: PurchaseSupplier[];
+  purchaseRequests: PurchaseRequest[];
+  purchaseOrders: PurchaseOrder[];
+  pendingReceipts: PendingReceipt[];
+  purchaseMessages: PurchaseMessage[];
   onBack: () => void;
+  onAddSupplier: (supplier: PurchaseSupplier) => void;
+  onResolveRequestSupplier: (requestId: string, supplier: PurchaseSupplier) => void;
+  onCreatePurchaseOrder: (purchaseOrder: PurchaseOrder, pendingReceipt: PendingReceipt) => void;
+  onAddPurchaseOrderDocument: (orderId: string, document: PurchaseOrderDocument) => void;
+  onAddPurchaseMessage: (message: PurchaseMessage) => void;
+  onReceivePurchaseReceipt: (
+    receiptId: string,
+    lineUpdates: PurchaseReceiptLineUpdate[],
+    status: PurchaseReceiptStatus,
+    issue: PurchaseReceiptIssue | "",
+    issueNotes: string
+  ) => void;
 };
 
-export function ProfileScreen({ profile, products, onBack }: ProfileScreenProps) {
+export function ProfileScreen({
+  pendingReceipts,
+  products,
+  profile,
+  purchaseMessages,
+  purchaseOrders,
+  purchaseRequests,
+  suppliers,
+  onAddPurchaseMessage,
+  onAddPurchaseOrderDocument,
+  onAddSupplier,
+  onBack,
+  onCreatePurchaseOrder,
+  onReceivePurchaseReceipt,
+  onResolveRequestSupplier
+}: ProfileScreenProps) {
   const Icon = profile.icon;
 
   if (profile.id === "ventas") {
     return <SalesView products={products} onBack={onBack} />;
   }
 
+  if (profile.id === "compras") {
+    return (
+      <PurchasesView
+        messages={purchaseMessages}
+        pendingReceipts={pendingReceipts}
+        products={products}
+        purchaseOrders={purchaseOrders}
+        requests={purchaseRequests}
+        suppliers={suppliers}
+        onAddMessage={onAddPurchaseMessage}
+        onAddPurchaseOrderDocument={onAddPurchaseOrderDocument}
+        onAddSupplier={onAddSupplier}
+        onBack={onBack}
+        onCreatePurchaseOrder={onCreatePurchaseOrder}
+        onResolveRequestSupplier={onResolveRequestSupplier}
+      />
+    );
+  }
+
   if (profile.id === "almacen") {
-    return <WarehouseScreen products={products} onBack={onBack} />;
+    return (
+      <WarehouseScreen
+        pendingReceipts={pendingReceipts}
+        products={products}
+        purchaseOrders={purchaseOrders}
+        onBack={onBack}
+        onReceivePurchaseReceipt={onReceivePurchaseReceipt}
+      />
+    );
   }
 
   if (profile.id === "fabricacion") {
     return <FabricationScreen products={products} onBack={onBack} />;
+  }
+
+  if (profile.id === "pre-produccion") {
+    return <PreproductionScreen products={products} onBack={onBack} />;
   }
 
   return (

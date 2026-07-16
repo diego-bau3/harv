@@ -1,0 +1,48 @@
+import type { Product, ProductComponent } from "../sales/types";
+import type { PurchaseRequest } from "./types";
+import { futureDate } from "./utils";
+
+const externalProcesses = new Set<ProductComponent["process"]>(["comprado", "servicio-externo"]);
+
+function needsSupplierRequest(component: ProductComponent) {
+  if (component.needsSupplierResearch) {
+    return true;
+  }
+
+  return externalProcesses.has(component.process) && !component.supplierCompany.trim();
+}
+
+export function createProductSupplierRequests(products: Product[], existingRequests: PurchaseRequest[] = []) {
+  const existingKeys = new Set(
+    existingRequests
+      .filter((request) => request.source === "manual" || request.source === "producto")
+      .map((request) => `${request.productId}:${request.componentId}`)
+  );
+
+  return products.flatMap((product) =>
+    product.components
+      .filter(needsSupplierRequest)
+      .map((component): PurchaseRequest => ({
+        id: `request-product-${product.id}-${component.id}`,
+        type: "problema",
+        source: "producto",
+        sourceRef: `product:${product.id}:${component.id}`,
+        productId: product.id,
+        componentId: component.id,
+        itemName: component.name,
+        productSku: product.sku,
+        quantity: component.quantity,
+        unit: component.unit,
+        supplierId: null,
+        requiredDate: futureDate(7),
+        priority: component.needsSupplierResearch ? "alta" : "normal",
+        status: "bloqueado",
+        reason: "Componente marcado Sin proveedor desde Productos.",
+        notes:
+          component.supplierResearchNotes ||
+          component.notes ||
+          "Compras debe investigar supplier, costo, lead time y datos de contacto."
+      }))
+      .filter((request) => !existingKeys.has(`${request.productId}:${request.componentId}`))
+  );
+}
